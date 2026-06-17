@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>番茄钟日记</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 左栏 番茄钟 -->
+    <aside class="sidebar">
+      <div class="pomodoro-section">
+        <h1 class="app-title">番茄钟日记</h1>
+
+        <div class="duration-selector">
+          <button class="duration-btn active" data-minutes="25">25</button>
+          <button class="duration-btn" data-minutes="30">30</button>
+          <button class="duration-btn" data-minutes="45">45</button>
+          <button class="duration-btn" data-minutes="60">60</button>
+          <span class="duration-label">分钟</span>
+        </div>
+
+        <div class="timer-container">
+          <svg class="timer-ring" viewBox="0 0 200 200">
+            <circle class="ring-bg" cx="100" cy="100" r="85" />
+            <circle class="ring-progress" cx="100" cy="100" r="85" id="ringProgress" />
+          </svg>
+          <div class="timer-display">
+            <span id="timerText">25:00</span>
+          </div>
+        </div>
+
+        <div class="timer-controls">
+          <button class="ctrl-btn primary" id="startBtn">开始</button>
+          <button class="ctrl-btn" id="pauseBtn" disabled>暂停</button>
+          <button class="ctrl-btn" id="resetBtn">重置</button>
+        </div>
+
+        <div class="today-count">
+          <span class="today-label">今日番茄</span>
+          <div class="tomatoes" id="tomatoes"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右栏 日记 -->
+    <main class="content">
+      <header class="content-header">
+        <h2 class="date-title" id="dateTitle"></h2>
+        <input type="date" id="datePicker" class="date-picker" />
+      </header>
+
+      <div class="records-container" id="recordsContainer"></div>
+    </main>
+
+    <!-- 底部统计条 -->
+    <footer class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">今日专注</span>
+        <span class="stat-value" id="todayMinutes">0 分钟</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">本周总计</span>
+        <span class="stat-value" id="weekMinutes">0 分钟</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="bar-chart" id="barChart"></div>
+    </footer>
+  </div>
+
+  <!-- 记录弹窗 -->
+  <div class="modal-overlay" id="recordModal" style="display:none;">
+    <div class="modal">
+      <h3 class="modal-title">这个番茄钟你完成了什么？</h3>
+      <input type="text" id="recordInput" class="modal-input" placeholder="一句话记录..." maxlength="200" />
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="cancelRecord">跳过</button>
+        <button class="modal-btn confirm" id="saveRecord">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑弹窗 -->
+  <div class="modal-overlay" id="editModal" style="display:none;">
+    <div class="modal">
+      <h3 class="modal-title">编辑记录</h3>
+      <input type="text" id="editInput" class="modal-input" placeholder="记录内容..." maxlength="200" />
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="cancelEdit">取消</button>
+        <button class="modal-btn confirm" id="saveEdit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
