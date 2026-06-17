@@ -14,7 +14,10 @@
     <!-- 左栏 番茄钟 -->
     <aside class="sidebar">
       <div class="pomodoro-section">
-        <h1 class="app-title">番茄钟日记</h1>
+        <div class="header-row">
+          <h1 class="app-title">番茄钟日记</h1>
+          <button class="settings-btn" id="settingsBtn" title="设置">⚙</button>
+        </div>
 
         <div class="duration-selector">
           <button class="duration-btn active" data-minutes="25">25</button>
@@ -93,6 +96,47 @@
       <div class="modal-actions">
         <button class="modal-btn cancel" id="cancelEdit">取消</button>
         <button class="modal-btn confirm" id="saveEdit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-overlay" id="settingsModal" style="display:none;">
+    <div class="modal settings-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">设置</h3>
+        <button class="modal-close" id="closeSettings">✕</button>
+      </div>
+      <div class="settings-section">
+        <h4 class="settings-section-title">快捷键</h4>
+        <div class="shortcut-item">
+          <span class="shortcut-label">开始/暂停番茄钟</span>
+          <div class="shortcut-input-wrap">
+            <input type="text" class="shortcut-input" id="shortcutToggleTimer" data-key="toggleTimer" readonly placeholder="点击录制" />
+            <button class="shortcut-clear" data-key="toggleTimer" title="重置为默认">↺</button>
+          </div>
+          <span class="shortcut-error" id="errorToggleTimer"></span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">重置番茄钟</span>
+          <div class="shortcut-input-wrap">
+            <input type="text" class="shortcut-input" id="shortcutResetTimer" data-key="resetTimer" readonly placeholder="点击录制" />
+            <button class="shortcut-clear" data-key="resetTimer" title="重置为默认">↺</button>
+          </div>
+          <span class="shortcut-error" id="errorResetTimer"></span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">显示/隐藏主窗口</span>
+          <div class="shortcut-input-wrap">
+            <input type="text" class="shortcut-input" id="shortcutToggleWindow" data-key="toggleWindow" readonly placeholder="点击录制" />
+            <button class="shortcut-clear" data-key="toggleWindow" title="重置为默认">↺</button>
+          </div>
+          <span class="shortcut-error" id="errorToggleWindow"></span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="cancelSettings">取消</button>
+        <button class="modal-btn confirm" id="saveSettings">保存</button>
       </div>
     </div>
   </div>

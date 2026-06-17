@@ -1,11 +1,19 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, Notification, globalShortcut, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 const DATA_FILE = path.join(app.getPath('userData'), 'pomodoro-data.json');
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'pomodoro-settings.json');
 
 let mainWindow;
+let miniWindow;
 let tray;
+
+const DEFAULT_SHORTCUTS = {
+  toggleTimer: 'Ctrl+Shift+S',
+  resetTimer: 'Ctrl+Shift+R',
+  toggleWindow: 'Ctrl+Shift+H',
+};
 
 function loadData() {
   try {
@@ -29,6 +37,33 @@ function saveData(data) {
     return true;
   } catch (e) {
     console.error('保存数据失败:', e);
+    return false;
+  }
+}
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_SHORTCUTS, ...parsed };
+    }
+  } catch (e) {
+    console.error('加载设置失败:', e);
+  }
+  return { ...DEFAULT_SHORTCUTS };
+}
+
+function saveSettings(settings) {
+  try {
+    const dir = path.dirname(SETTINGS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    return true;
+  } catch (e) {
+    console.error('保存设置失败:', e);
     return false;
   }
 }
@@ -59,6 +94,47 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile('index.html');
+
+  mainWindow.on('close', (e) => {
+    if (!app.isQuiting) {
+      e.preventDefault();
+      mainWindow.hide();
+      if (process.platform === 'darwin') {
+        app.dock?.hide();
+      }
+    }
+  });
+}
+
+function createMiniWindow() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { workArea } = primaryDisplay;
+
+  miniWindow = new BrowserWindow({
+    width: 140,
+    height: 44,
+    x: workArea.width - 160,
+    y: 40,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  miniWindow.setAlwaysOnTop(true, 'screen-saver');
+  miniWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  miniWindow.loadFile('mini.html');
+
+  if (process.platform === 'darwin') {
+    miniWindow.setHiddenInAppNapDisabled(true);
+  }
 }
 
 function createTray() {
@@ -108,9 +184,25 @@ function createTray() {
       click: () => {
         if (mainWindow.isVisible()) {
           mainWindow.hide();
+          if (process.platform === 'darwin') {
+            app.dock?.hide();
+          }
         } else {
           mainWindow.show();
           mainWindow.focus();
+          if (process.platform === 'darwin') {
+            app.dock?.show();
+          }
+        }
+      },
+    },
+    {
+      label: '显示/隐藏迷你窗',
+      click: () => {
+        if (miniWindow.isVisible()) {
+          miniWindow.hide();
+        } else {
+          miniWindow.show();
         }
       },
     },
@@ -118,6 +210,7 @@ function createTray() {
     {
       label: '退出',
       click: () => {
+        app.isQuiting = true;
         app.quit();
       },
     },
@@ -128,9 +221,15 @@ function createTray() {
   tray.on('click', () => {
     if (mainWindow.isVisible()) {
       mainWindow.hide();
+      if (process.platform === 'darwin') {
+        app.dock?.hide();
+      }
     } else {
       mainWindow.show();
       mainWindow.focus();
+      if (process.platform === 'darwin') {
+        app.dock?.show();
+      }
     }
   });
 }
@@ -140,6 +239,81 @@ function updateTrayTooltip() {
     const count = countTodayPomodoros();
     tray.setToolTip(`番茄钟日记 - 今日完成 ${count} 个番茄钟`);
   }
+}
+
+function registerGlobalShortcuts() {
+  const settings = loadSettings();
+
+  globalShortcut.unregisterAll();
+
+  try {
+    globalShortcut.register(settings.toggleTimer, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('shortcut:toggle-timer');
+      }
+      if (miniWindow && !miniWindow.isDestroyed()) {
+        miniWindow.webContents.send('shortcut:toggle-timer');
+      }
+    });
+  } catch (e) {
+    console.error('注册快捷键失败 (toggleTimer):', e);
+  }
+
+  try {
+    globalShortcut.register(settings.resetTimer, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('shortcut:reset-timer');
+      }
+      if (miniWindow && !miniWindow.isDestroyed()) {
+        miniWindow.webContents.send('shortcut:reset-timer');
+      }
+    });
+  } catch (e) {
+    console.error('注册快捷键失败 (resetTimer):', e);
+  }
+
+  try {
+    globalShortcut.register(settings.toggleWindow, () => {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+        if (process.platform === 'darwin') {
+          app.dock?.hide();
+        }
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+        if (process.platform === 'darwin') {
+          app.dock?.show();
+        }
+      }
+    });
+  } catch (e) {
+    console.error('注册快捷键失败 (toggleWindow):', e);
+  }
+}
+
+function checkShortcutConflict(accelerator, excludeKey) {
+  const settings = loadSettings();
+  for (const [key, value] of Object.entries(settings)) {
+    if (key !== excludeKey && value === accelerator) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isShortcutAvailable(accelerator) {
+  if (!accelerator || accelerator.trim() === '') {
+    return { valid: false, reason: '快捷键不能为空' };
+  }
+  if (checkShortcutConflict(accelerator, null)) {
+    return { valid: false, reason: '与其他快捷键冲突' };
+  }
+  const canRegister = globalShortcut.isRegistered(accelerator);
+  if (canRegister) {
+    return { valid: false, reason: '该快捷键已被系统或其他应用占用' };
+  }
+  return { valid: true };
 }
 
 ipcMain.handle('load-data', () => {
@@ -165,15 +339,108 @@ ipcMain.handle('update-tray', () => {
   return true;
 });
 
+ipcMain.handle('load-settings', () => {
+  return loadSettings();
+});
+
+ipcMain.handle('save-settings', (_event, settings) => {
+  const ok = saveSettings(settings);
+  if (ok) {
+    registerGlobalShortcuts();
+  }
+  return ok;
+});
+
+ipcMain.handle('check-shortcut', (_event, { accelerator, excludeKey }) => {
+  if (!accelerator || accelerator.trim() === '') {
+    return { valid: false, reason: '快捷键不能为空' };
+  }
+  const settings = loadSettings();
+  for (const [key, value] of Object.entries(settings)) {
+    if (key !== excludeKey && value === accelerator) {
+      return { valid: false, reason: '与其他快捷键冲突' };
+    }
+  }
+  const currentShortcuts = Object.values(settings).filter((s) => s !== settings[excludeKey]);
+  const isRegistered = currentShortcuts.includes(accelerator);
+  if (isRegistered) {
+    return { valid: false, reason: '与其他快捷键冲突' };
+  }
+  return { valid: true };
+});
+
+ipcMain.handle('toggle-main-window', () => {
+  mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === 'darwin') {
+    app.dock?.show();
+  }
+  return true;
+});
+
+ipcMain.handle('timer-state-updated', (_event, state) => {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.webContents.send('timer-state', state);
+  }
+  return true;
+});
+
+ipcMain.handle('mini-toggle-timer', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('shortcut:toggle-timer');
+  }
+  return true;
+});
+
+ipcMain.handle('mini-reset-timer', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('shortcut:reset-timer');
+  }
+  return true;
+});
+
+ipcMain.handle('mini-show-main', () => {
+  mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === 'darwin') {
+    app.dock?.show();
+  }
+  return true;
+});
+
+ipcMain.handle('mini-close', () => {
+  miniWindow.hide();
+  return true;
+});
+
+ipcMain.handle('get-timer-state', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('request-timer-state');
+  }
+  return true;
+});
+
 app.whenReady().then(() => {
   createWindow();
+  createMiniWindow();
   createTray();
+  registerGlobalShortcuts();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+      if (process.platform === 'darwin') {
+        app.dock?.show();
+      }
     }
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

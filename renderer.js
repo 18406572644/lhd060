@@ -2,6 +2,12 @@ const { ipcRenderer } = require('electron');
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 85;
 
+const DEFAULT_SHORTCUTS = {
+  toggleTimer: 'Ctrl+Shift+S',
+  resetTimer: 'Ctrl+Shift+R',
+  toggleWindow: 'Ctrl+Shift+H',
+};
+
 let state = {
   durationMinutes: 25,
   remainingSeconds: 25 * 60,
@@ -13,6 +19,9 @@ let state = {
   currentDate: getDateKey(new Date()),
   editingRecordId: null,
   editingDateKey: null,
+  settings: { ...DEFAULT_SHORTCUTS },
+  tempSettings: { ...DEFAULT_SHORTCUTS },
+  recordingShortcut: null,
 };
 
 const el = {
@@ -36,6 +45,17 @@ const el = {
   editInput: document.getElementById('editInput'),
   cancelEdit: document.getElementById('cancelEdit'),
   saveEdit: document.getElementById('saveEdit'),
+  settingsBtn: document.getElementById('settingsBtn'),
+  settingsModal: document.getElementById('settingsModal'),
+  closeSettings: document.getElementById('closeSettings'),
+  cancelSettings: document.getElementById('cancelSettings'),
+  saveSettings: document.getElementById('saveSettings'),
+  shortcutToggleTimer: document.getElementById('shortcutToggleTimer'),
+  shortcutResetTimer: document.getElementById('shortcutResetTimer'),
+  shortcutToggleWindow: document.getElementById('shortcutToggleWindow'),
+  errorToggleTimer: document.getElementById('errorToggleTimer'),
+  errorResetTimer: document.getElementById('errorResetTimer'),
+  errorToggleWindow: document.getElementById('errorToggleWindow'),
 };
 
 function getDateKey(d) {
@@ -81,6 +101,18 @@ function updateTimerDisplay() {
   updateRingProgress();
 }
 
+async function syncTimerState() {
+  try {
+    await ipcRenderer.invoke('timer-state-updated', {
+      remainingSeconds: state.remainingSeconds,
+      isRunning: state.isRunning,
+      totalSeconds: state.totalSeconds,
+    });
+  } catch (e) {
+    console.warn('同步定时器状态失败:', e);
+  }
+}
+
 function startTimer() {
   if (state.isRunning) return;
   if (state.remainingSeconds <= 0) {
@@ -97,10 +129,13 @@ function startTimer() {
     if (state.remainingSeconds > 0) {
       state.remainingSeconds--;
       updateTimerDisplay();
+      syncTimerState();
     } else {
       completePomodoro();
     }
   }, 1000);
+
+  syncTimerState();
 }
 
 function pauseTimer() {
@@ -110,6 +145,7 @@ function pauseTimer() {
   state.timerId = null;
   el.startBtn.disabled = false;
   el.pauseBtn.disabled = true;
+  syncTimerState();
 }
 
 function resetTimer() {
@@ -121,6 +157,7 @@ function resetTimer() {
   updateTimerDisplay();
   el.startBtn.disabled = false;
   el.pauseBtn.disabled = true;
+  syncTimerState();
 }
 
 function playDingSound() {
@@ -412,6 +449,7 @@ function setupDurationButtons() {
       state.remainingSeconds = mins * 60;
       state.startTime = null;
       updateTimerDisplay();
+      syncTimerState();
     });
   });
 }
@@ -465,6 +503,160 @@ function setupControls() {
   });
 }
 
+function keyEventToAccelerator(e) {
+  const parts = [];
+  if (e.controlKey || e.metaKey) parts.push(process.platform === 'darwin' ? 'Cmd' : 'Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+
+  let key = e.key;
+  if (key === ' ') key = 'Space';
+  else if (key.length === 1) key = key.toUpperCase();
+  else if (key.startsWith('Arrow')) key = key.replace('Arrow', '');
+  else if (key === 'Escape') key = 'Esc';
+
+  const modifierKeys = ['Control', 'Shift', 'Alt', 'Meta'];
+  if (modifierKeys.includes(key)) {
+    return null;
+  }
+
+  parts.push(key);
+  return parts.join('+');
+}
+
+function setupShortcutInputs() {
+  const inputs = [
+    { input: el.shortcutToggleTimer, key: 'toggleTimer', error: el.errorToggleTimer },
+    { input: el.shortcutResetTimer, key: 'resetTimer', error: el.errorResetTimer },
+    { input: el.shortcutToggleWindow, key: 'toggleWindow', error: el.errorToggleWindow },
+  ];
+
+  inputs.forEach(({ input, key, error }) => {
+    input.value = state.tempSettings[key];
+
+    input.addEventListener('focus', () => {
+      state.recordingShortcut = key;
+      input.classList.add('recording');
+      input.value = '请按下快捷键...';
+      error.textContent = '';
+    });
+
+    input.addEventListener('blur', () => {
+      if (state.recordingShortcut === key) {
+        state.recordingShortcut = null;
+        input.classList.remove('recording');
+        input.value = state.tempSettings[key];
+      }
+    });
+
+    input.addEventListener('keydown', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === 'Escape') {
+        state.recordingShortcut = null;
+        input.classList.remove('recording');
+        input.value = state.tempSettings[key];
+        input.blur();
+        return;
+      }
+
+      const accelerator = keyEventToAccelerator(e);
+      if (!accelerator) return;
+
+      const result = await ipcRenderer.invoke('check-shortcut', {
+        accelerator,
+        excludeKey: key,
+      });
+
+      if (result.valid) {
+        state.tempSettings[key] = accelerator;
+        input.value = accelerator;
+        error.textContent = '';
+        error.classList.remove('show');
+        state.recordingShortcut = null;
+        input.classList.remove('recording');
+        input.blur();
+      } else {
+        error.textContent = result.reason;
+        error.classList.add('show');
+      }
+    });
+  });
+
+  document.querySelectorAll('.shortcut-clear').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      state.tempSettings[key] = DEFAULT_SHORTCUTS[key];
+      const input = document.getElementById(`shortcut${key.charAt(0).toUpperCase() + key.slice(1)}`);
+      if (input) {
+        input.value = DEFAULT_SHORTCUTS[key];
+      }
+      const errorEl = document.getElementById(`error${key.charAt(0).toUpperCase() + key.slice(1)}`);
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.classList.remove('show');
+      }
+    });
+  });
+}
+
+function openSettings() {
+  state.tempSettings = { ...state.settings };
+  el.shortcutToggleTimer.value = state.tempSettings.toggleTimer;
+  el.shortcutResetTimer.value = state.tempSettings.resetTimer;
+  el.shortcutToggleWindow.value = state.tempSettings.toggleWindow;
+  el.errorToggleTimer.textContent = '';
+  el.errorResetTimer.textContent = '';
+  el.errorToggleWindow.textContent = '';
+  el.errorToggleTimer.classList.remove('show');
+  el.errorResetTimer.classList.remove('show');
+  el.errorToggleWindow.classList.remove('show');
+  el.settingsModal.style.display = 'flex';
+}
+
+function closeSettings() {
+  el.settingsModal.style.display = 'none';
+  state.recordingShortcut = null;
+}
+
+async function saveSettingsHandler() {
+  const ok = await ipcRenderer.invoke('save-settings', state.tempSettings);
+  if (ok) {
+    state.settings = { ...state.tempSettings };
+    closeSettings();
+  }
+}
+
+function setupSettings() {
+  el.settingsBtn.addEventListener('click', openSettings);
+  el.closeSettings.addEventListener('click', closeSettings);
+  el.cancelSettings.addEventListener('click', closeSettings);
+  el.saveSettings.addEventListener('click', saveSettingsHandler);
+
+  el.settingsModal.addEventListener('click', (e) => {
+    if (e.target === el.settingsModal) {
+      closeSettings();
+    }
+  });
+}
+
+ipcRenderer.on('shortcut:toggle-timer', () => {
+  if (state.isRunning) {
+    pauseTimer();
+  } else {
+    startTimer();
+  }
+});
+
+ipcRenderer.on('shortcut:reset-timer', () => {
+  resetTimer();
+});
+
+ipcRenderer.on('request-timer-state', () => {
+  syncTimerState();
+});
+
 async function init() {
   try {
     state.data = await ipcRenderer.invoke('load-data');
@@ -473,12 +665,25 @@ async function init() {
     state.data = { records: {} };
   }
 
+  try {
+    const loadedSettings = await ipcRenderer.invoke('load-settings');
+    state.settings = { ...DEFAULT_SHORTCUTS, ...loadedSettings };
+    state.tempSettings = { ...state.settings };
+  } catch (e) {
+    console.error('加载设置失败:', e);
+    state.settings = { ...DEFAULT_SHORTCUTS };
+    state.tempSettings = { ...DEFAULT_SHORTCUTS };
+  }
+
   setupDurationButtons();
   setupControls();
+  setupSettings();
+  setupShortcutInputs();
   updateTimerDisplay();
   renderTomatoes();
   renderRecords();
   renderStats();
+  syncTimerState();
 }
 
 init();
