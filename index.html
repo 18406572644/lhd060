@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app">
     <!-- 左栏 番茄钟 -->
     <aside class="sidebar">
       <div class="pomodoro-section">
@@ -19,12 +19,31 @@
           <button class="settings-btn" id="settingsBtn" title="设置">⚙</button>
         </div>
 
-        <div class="duration-selector">
+        <div class="duration-selector" id="durationSelector">
           <button class="duration-btn active" data-minutes="25">25</button>
           <button class="duration-btn" data-minutes="30">30</button>
           <button class="duration-btn" data-minutes="45">45</button>
           <button class="duration-btn" data-minutes="60">60</button>
+          <button class="duration-btn custom-add-btn" id="customDurationBtn" title="自定义时长">+</button>
           <span class="duration-label">分钟</span>
+        </div>
+
+        <div class="custom-duration-row" id="customDurationRow" style="display:none;">
+          <input type="number" id="customDurationInput" class="custom-duration-input" min="1" max="120" placeholder="1-120" />
+          <button class="custom-duration-save" id="saveCustomDuration">保存</button>
+          <button class="custom-duration-cancel" id="cancelCustomDuration">✕</button>
+        </div>
+
+        <div class="custom-presets" id="customPresets"></div>
+
+        <div class="focus-mode-row">
+          <button class="focus-mode-btn" id="focusModeBtn" title="深度专注模式">
+            <span class="focus-icon">🎯</span>
+            <span class="focus-label">深度专注</span>
+          </button>
+          <button class="fullscreen-btn" id="fullscreenBtn" title="全屏沉浸">
+            <span class="fullscreen-icon">⛶</span>
+          </button>
         </div>
 
         <div class="timer-container">

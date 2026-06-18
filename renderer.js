@@ -15,7 +15,7 @@ let state = {
   isRunning: false,
   timerId: null,
   startTime: null,
-  data: { records: {}, tasks: {}, lastActiveDate: null },
+  data: { records: {}, tasks: {}, lastActiveDate: null, customPresets: [] },
   currentDate: getDateKey(new Date()),
   editingRecordId: null,
   editingDateKey: null,
@@ -33,9 +33,12 @@ let state = {
   tempTaskPomodoroCount: 1,
   activeTab: 'tasks',
   draggedTaskId: null,
+  deepFocusMode: false,
+  isFullscreen: false,
 };
 
 const el = {
+  app: document.getElementById('app'),
   timerText: document.getElementById('timerText'),
   ringProgress: document.getElementById('ringProgress'),
   startBtn: document.getElementById('startBtn'),
@@ -97,6 +100,19 @@ const el = {
   cancelTask: document.getElementById('cancelTask'),
   saveTask: document.getElementById('saveTask'),
   recordTaskInfo: document.getElementById('recordTaskInfo'),
+  durationSelector: document.getElementById('durationSelector'),
+  customDurationBtn: document.getElementById('customDurationBtn'),
+  customDurationRow: document.getElementById('customDurationRow'),
+  customDurationInput: document.getElementById('customDurationInput'),
+  saveCustomDuration: document.getElementById('saveCustomDuration'),
+  cancelCustomDuration: document.getElementById('cancelCustomDuration'),
+  customPresets: document.getElementById('customPresets'),
+  focusModeBtn: document.getElementById('focusModeBtn'),
+  fullscreenBtn: document.getElementById('fullscreenBtn'),
+  content: document.querySelector('.content'),
+  sidebar: document.querySelector('.sidebar'),
+  statsBar: document.querySelector('.stats-bar'),
+  contentHeader: document.querySelector('.content-header'),
 };
 
 function getDateKey(d) {
@@ -166,6 +182,10 @@ function startTimer() {
   el.startBtn.disabled = true;
   el.pauseBtn.disabled = false;
 
+  if (state.deepFocusMode) {
+    applyDeepFocusMode();
+  }
+
   state.timerId = setInterval(() => {
     if (state.remainingSeconds > 0) {
       state.remainingSeconds--;
@@ -195,6 +215,11 @@ function resetTimer() {
   state.timerId = null;
   state.remainingSeconds = state.totalSeconds;
   state.startTime = null;
+
+  if (state.deepFocusMode) {
+    toggleDeepFocusMode();
+  }
+
   updateTimerDisplay();
   el.startBtn.disabled = false;
   el.pauseBtn.disabled = true;
@@ -230,6 +255,11 @@ function playDingSound() {
 
 function completePomodoro() {
   pauseTimer();
+
+  if (state.deepFocusMode) {
+    toggleDeepFocusMode();
+  }
+
   playDingSound();
 
   ipcRenderer.invoke('notify', {
@@ -708,6 +738,7 @@ function handleDrop(e) {
 
 function renderAll() {
   renderTaskSelector();
+  renderCustomPresets();
   if (state.activeTab === 'tasks') {
     renderTasks();
     renderTasksSummary();
@@ -1483,20 +1514,200 @@ function setupStatsModal() {
   });
 }
 
+function selectDuration(mins, btnElement) {
+  if (state.isRunning) return;
+  document.querySelectorAll('.duration-btn, .custom-preset-btn').forEach((b) => b.classList.remove('active'));
+  if (btnElement) btnElement.classList.add('active');
+  state.durationMinutes = mins;
+  state.totalSeconds = mins * 60;
+  state.remainingSeconds = mins * 60;
+  state.startTime = null;
+  updateTimerDisplay();
+  syncTimerState();
+}
+
 function setupDurationButtons() {
-  document.querySelectorAll('.duration-btn').forEach((btn) => {
+  document.querySelectorAll('.duration-btn[data-minutes]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (state.isRunning) return;
-      document.querySelectorAll('.duration-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const mins = parseInt(btn.dataset.minutes, 10);
-      state.durationMinutes = mins;
-      state.totalSeconds = mins * 60;
-      state.remainingSeconds = mins * 60;
-      state.startTime = null;
-      updateTimerDisplay();
-      syncTimerState();
+      selectDuration(parseInt(btn.dataset.minutes, 10), btn);
     });
+  });
+}
+
+function renderCustomPresets() {
+  const presets = state.data.customPresets || [];
+  el.customPresets.innerHTML = '';
+
+  if (presets.length === 0) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'custom-presets-row';
+  wrapper.innerHTML = '<span class="custom-presets-label">我的预设:</span>';
+
+  const btnsContainer = document.createElement('div');
+  btnsContainer.className = 'custom-presets-btns';
+
+  presets.forEach((mins) => {
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'custom-preset-wrap';
+
+    const btn = document.createElement('button');
+    btn.className = 'duration-btn custom-preset-btn';
+    btn.dataset.minutes = String(mins);
+    btn.textContent = String(mins);
+    if (state.durationMinutes === mins) btn.classList.add('active');
+
+    btn.addEventListener('click', () => selectDuration(mins, btn));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'custom-preset-remove';
+    removeBtn.title = '删除预设';
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.isRunning) return;
+      removeCustomPreset(mins);
+    });
+
+    btnWrap.appendChild(btn);
+    btnWrap.appendChild(removeBtn);
+    btnsContainer.appendChild(btnWrap);
+  });
+
+  wrapper.appendChild(btnsContainer);
+  el.customPresets.appendChild(wrapper);
+}
+
+function removeCustomPreset(mins) {
+  if (!state.data.customPresets) state.data.customPresets = [];
+  const idx = state.data.customPresets.indexOf(mins);
+  if (idx !== -1) {
+    state.data.customPresets.splice(idx, 1);
+    persistData();
+    renderCustomPresets();
+  }
+}
+
+function addCustomPreset(mins) {
+  if (!state.data.customPresets) state.data.customPresets = [];
+  if (state.data.customPresets.includes(mins)) return false;
+  if ([25, 30, 45, 60].includes(mins)) return false;
+  state.data.customPresets.push(mins);
+  state.data.customPresets.sort((a, b) => a - b);
+  persistData();
+  return true;
+}
+
+function setupCustomDuration() {
+  el.customDurationBtn.addEventListener('click', () => {
+    if (state.isRunning) return;
+    el.customDurationRow.style.display = 'flex';
+    el.customDurationInput.value = '';
+    setTimeout(() => el.customDurationInput.focus(), 50);
+  });
+
+  el.cancelCustomDuration.addEventListener('click', () => {
+    el.customDurationRow.style.display = 'none';
+    el.customDurationInput.value = '';
+  });
+
+  const handleSave = () => {
+    const val = parseInt(el.customDurationInput.value, 10);
+    if (isNaN(val) || val < 1 || val > 120) {
+      el.customDurationInput.focus();
+      el.customDurationInput.select();
+      return;
+    }
+
+    if (![25, 30, 45, 60].includes(val) && !state.data.customPresets?.includes(val)) {
+      addCustomPreset(val);
+      renderCustomPresets();
+    }
+
+    el.customDurationRow.style.display = 'none';
+    el.customDurationInput.value = '';
+    selectDuration(val, null);
+    document.querySelectorAll('.duration-btn, .custom-preset-btn').forEach((b) => {
+      if (parseInt(b.dataset.minutes, 10) === val) b.classList.add('active');
+    });
+  };
+
+  el.saveCustomDuration.addEventListener('click', handleSave);
+
+  el.customDurationInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      el.customDurationRow.style.display = 'none';
+      el.customDurationInput.value = '';
+    }
+  });
+}
+
+function toggleDeepFocusMode() {
+  state.deepFocusMode = !state.deepFocusMode;
+  applyDeepFocusMode();
+
+  if (state.deepFocusMode) {
+    ipcRenderer.invoke('notify', {
+      title: '深度专注模式已开启',
+      body: '保持专注，番茄钟结束后恢复正常界面。',
+    }).catch(() => {});
+  }
+}
+
+function applyDeepFocusMode() {
+  if (state.deepFocusMode) {
+    el.app.classList.add('deep-focus-mode');
+    el.focusModeBtn.classList.add('active');
+    el.addTaskBtn.disabled = true;
+    el.datePicker.disabled = true;
+    el.statsOpenBtn.disabled = true;
+    el.settingsBtn.disabled = true;
+    el.tabBtns.forEach((btn) => (btn.disabled = true));
+  } else {
+    el.app.classList.remove('deep-focus-mode');
+    el.focusModeBtn.classList.remove('active');
+    el.addTaskBtn.disabled = false;
+    el.datePicker.disabled = false;
+    el.statsOpenBtn.disabled = false;
+    el.settingsBtn.disabled = false;
+    el.tabBtns.forEach((btn) => (btn.disabled = false));
+  }
+}
+
+async function toggleFullscreen() {
+  try {
+    const result = await ipcRenderer.invoke('toggle-fullscreen');
+    state.isFullscreen = result;
+    if (state.isFullscreen) {
+      el.fullscreenBtn.classList.add('active');
+      el.fullscreenBtn.querySelector('.fullscreen-icon').textContent = '⛶';
+    } else {
+      el.fullscreenBtn.classList.remove('active');
+    }
+  } catch (e) {
+    console.warn('切换全屏失败:', e);
+  }
+}
+
+function setupFocusAndFullscreen() {
+  el.focusModeBtn.addEventListener('click', () => {
+    toggleDeepFocusMode();
+  });
+
+  el.fullscreenBtn.addEventListener('click', () => {
+    toggleFullscreen();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F11') {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+    if (e.key === 'Escape' && state.deepFocusMode && state.isRunning) {
+      e.preventDefault();
+    }
   });
 }
 
@@ -1742,9 +1953,10 @@ async function init() {
     state.data = await ipcRenderer.invoke('load-data');
     if (!state.data.tasks) state.data.tasks = {};
     if (!state.data.lastActiveDate) state.data.lastActiveDate = null;
+    if (!state.data.customPresets) state.data.customPresets = [];
   } catch (e) {
     console.error('加载数据失败:', e);
-    state.data = { records: {}, tasks: {}, lastActiveDate: null };
+    state.data = { records: {}, tasks: {}, lastActiveDate: null, customPresets: [] };
   }
 
   try {
@@ -1758,6 +1970,8 @@ async function init() {
   }
 
   setupDurationButtons();
+  setupCustomDuration();
+  setupFocusAndFullscreen();
   setupTaskControls();
   setupControls();
   setupSettings();

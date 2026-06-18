@@ -462,6 +462,15 @@ ipcMain.handle('get-timer-state', () => {
   return true;
 });
 
+ipcMain.handle('toggle-fullscreen', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const isFullscreen = mainWindow.isFullScreen();
+    mainWindow.setFullScreen(!isFullscreen);
+    return !isFullscreen;
+  }
+  return false;
+});
+
 app.whenReady().then(() => {
   createWindow();
   createMiniWindow();
