@@ -1845,7 +1845,8 @@ html, body {
 }
 
 .app.deep-focus-mode .settings-btn,
-.app.deep-focus-mode .custom-duration-btn,
+.app.deep-focus-mode .custom-add-btn,
+.app.deep-focus-mode .custom-duration-row,
 .app.deep-focus-mode .custom-preset-remove,
 .app.deep-focus-mode .task-selector,
 .app.deep-focus-mode .today-count {
@@ -1896,4 +1897,504 @@ html, body {
   .app.deep-focus-mode #timerText {
     font-size: 56px;
   }
+}
+
+/* ===== 日历视图 ===== */
+#calendarTab {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #333;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.calendar-nav-btn:hover {
+  border-color: #22c55e;
+  color: #22c55e;
+  background: #f0fdf4;
+}
+
+.calendar-nav-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  min-width: 140px;
+  text-align: center;
+}
+
+.calendar-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cal-today-btn {
+  padding: 6px 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a1a2e;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cal-today-btn:hover {
+  border-color: #22c55e;
+  color: #22c55e;
+  background: #f0fdf4;
+}
+
+.cal-view-toggle {
+  display: flex;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.cal-view-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cal-view-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cal-zoom-toggle {
+  display: flex;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.cal-zoom-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cal-zoom-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 月视图 */
+.cal-month-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 24px;
+  overflow-y: auto;
+}
+
+.cal-month-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  margin-bottom: 1px;
+}
+
+.cal-month-header-cell {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  letter-spacing: 0.5px;
+}
+
+.cal-month-header-cell.weekend {
+  color: #b0b0b0;
+}
+
+.cal-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 1px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.cal-month-cell {
+  background: #fff;
+  padding: 6px 8px;
+  min-height: 90px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-month-cell:hover {
+  background: #fafafa;
+}
+
+.cal-month-cell.other-month {
+  opacity: 0.35;
+}
+
+.cal-month-cell.weekend {
+  background: #f9f9f9;
+}
+
+.cal-month-cell.weekend:hover {
+  background: #f5f5f5;
+}
+
+.cal-month-cell.today {
+  box-shadow: inset 0 0 0 2px #22c55e;
+}
+
+.cal-month-cell.holiday .cal-day-number {
+  color: #ef4444;
+}
+
+.cal-day-number {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 4px;
+}
+
+.cal-month-cell.weekend .cal-day-number {
+  color: #999;
+}
+
+.cal-month-cell.today .cal-day-number {
+  color: #22c55e;
+}
+
+.cal-day-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.cal-day-progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-day-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cal-day-progress-fill {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.cal-day-progress-text {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.cal-day-heat {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ebedf0;
+  flex-shrink: 0;
+}
+
+.cal-day-heat.level-1 { background: #9be9a8; }
+.cal-day-heat.level-2 { background: #40c463; }
+.cal-day-heat.level-3 { background: #30a14e; }
+.cal-day-heat.level-4 { background: #216e39; }
+
+.cal-day-pomodoro {
+  font-size: 11px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cal-day-pomodoro-icon {
+  font-size: 10px;
+}
+
+.cal-day-carryover {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 5px;
+  background: #f3e8ff;
+  color: #9333ea;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cal-month-cell.today .cal-day-carryover {
+  background: rgba(147, 51, 234, 0.15);
+}
+
+/* 日历 Tooltip */
+.cal-tooltip {
+  position: fixed;
+  z-index: 2000;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 260px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  animation: tooltipIn 0.15s ease;
+}
+
+@keyframes tooltipIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cal-tooltip-title {
+  font-family: 'Source Serif 4', serif;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: #fff;
+}
+
+.cal-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.cal-tooltip-row + .cal-tooltip-row {
+  margin-top: 2px;
+}
+
+/* 周视图 */
+.cal-week-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cal-week-header {
+  display: grid;
+  grid-template-columns: 56px repeat(7, 1fr);
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 5;
+}
+
+.cal-week-header-spacer {
+  border-right: 1px solid #f0f0f0;
+}
+
+.cal-week-header-day {
+  text-align: center;
+  padding: 10px 4px;
+  font-size: 12px;
+  color: #999;
+  border-right: 1px solid #f0f0f0;
+}
+
+.cal-week-header-day:last-child {
+  border-right: none;
+}
+
+.cal-week-header-day.today {
+  color: #22c55e;
+  font-weight: 700;
+}
+
+.cal-week-header-date {
+  font-family: 'DM Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  display: block;
+}
+
+.cal-week-header-day.today .cal-week-header-date {
+  color: #22c55e;
+}
+
+.cal-week-header-day.weekend {
+  background: #f9f9f9;
+}
+
+.cal-week-body {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+
+.cal-week-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cal-week-body::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.cal-week-grid {
+  display: grid;
+  grid-template-columns: 56px repeat(7, 1fr);
+  position: relative;
+}
+
+.cal-week-time-label {
+  padding: 0 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #bbb;
+  text-align: right;
+  position: absolute;
+  right: auto;
+  width: 56px;
+  transform: translateY(-7px);
+}
+
+.cal-week-row {
+  display: contents;
+}
+
+.cal-week-time-cell {
+  border-right: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
+  position: relative;
+}
+
+.cal-week-day-cell {
+  border-right: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.cal-week-day-cell:hover {
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.cal-week-day-cell.weekend {
+  background: #f9f9f9;
+}
+
+.cal-week-day-cell.holiday {
+  background: #fef2f2;
+}
+
+.cal-week-pomodoro-card {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  cursor: default;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(34, 197, 94, 0.3);
+}
+
+.cal-week-pomodoro-card .card-task {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-week-pomodoro-card .card-content {
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 快速补录弹窗 */
+.quick-record-form {
+  margin-bottom: 20px;
 }

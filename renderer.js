@@ -35,6 +35,16 @@ let state = {
   draggedTaskId: null,
   deepFocusMode: false,
   isFullscreen: false,
+  calendar: {
+    viewMode: 'month',
+    viewYear: new Date().getFullYear(),
+    viewMonth: new Date().getMonth(),
+    viewWeekStart: null,
+    weekZoom: 60,
+    holidays: {},
+    holidaysEnabled: false,
+    quickRecordDate: null,
+  },
 };
 
 const el = {
@@ -113,6 +123,25 @@ const el = {
   sidebar: document.querySelector('.sidebar'),
   statsBar: document.querySelector('.stats-bar'),
   contentHeader: document.querySelector('.content-header'),
+  calendarTab: document.getElementById('calendarTab'),
+  calPrevBtn: document.getElementById('calPrevBtn'),
+  calNextBtn: document.getElementById('calNextBtn'),
+  calNavTitle: document.getElementById('calNavTitle'),
+  calTodayBtn: document.getElementById('calTodayBtn'),
+  calViewBtns: document.querySelectorAll('.cal-view-btn'),
+  calZoomToggle: document.getElementById('calZoomToggle'),
+  calZoomBtns: document.querySelectorAll('.cal-zoom-btn'),
+  calMonthView: document.getElementById('calMonthView'),
+  calWeekView: document.getElementById('calWeekView'),
+  calTooltip: document.getElementById('calTooltip'),
+  quickRecordModal: document.getElementById('quickRecordModal'),
+  qrDateInput: document.getElementById('qrDateInput'),
+  qrStartTime: document.getElementById('qrStartTime'),
+  qrDuration: document.getElementById('qrDuration'),
+  qrContent: document.getElementById('qrContent'),
+  qrTaskSelect: document.getElementById('qrTaskSelect'),
+  cancelQuickRecord: document.getElementById('cancelQuickRecord'),
+  saveQuickRecord: document.getElementById('saveQuickRecord'),
 };
 
 function getDateKey(d) {
@@ -701,11 +730,14 @@ function switchTab(tab) {
   });
   el.tasksTab.style.display = tab === 'tasks' ? 'flex' : 'none';
   el.recordsTab.style.display = tab === 'records' ? 'flex' : 'none';
+  el.calendarTab.style.display = tab === 'calendar' ? 'flex' : 'none';
   if (tab === 'tasks') {
     renderTasks();
     renderTasksSummary();
-  } else {
+  } else if (tab === 'records') {
     renderRecords();
+  } else if (tab === 'calendar') {
+    renderCalendar();
   }
 }
 
@@ -794,8 +826,10 @@ function renderAll() {
   if (state.activeTab === 'tasks') {
     renderTasks();
     renderTasksSummary();
-  } else {
+  } else if (state.activeTab === 'records') {
     renderRecords();
+  } else if (state.activeTab === 'calendar') {
+    renderCalendar();
   }
   renderTomatoes();
   renderStats();
@@ -2093,6 +2127,520 @@ ipcRenderer.on('request-timer-state', () => {
   syncTimerState();
 });
 
+function getWeekStartForDate(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getWeekDatesFromDate(weekStart) {
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function getMonthData(year, month) {
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  let startDayOfWeek = firstDay.getDay();
+  if (startDayOfWeek === 0) startDayOfWeek = 7;
+  const prevMonthDays = new Date(year, month, 0).getDate();
+
+  const cells = [];
+  for (let i = 1; i < startDayOfWeek; i++) {
+    cells.push({ date: new Date(year, month - 1, prevMonthDays - startDayOfWeek + i + 1), isCurrentMonth: false });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ date: new Date(year, month, d), isCurrentMonth: true });
+  }
+  let nextMonthDay = 1;
+  while (cells.length < 42) {
+    cells.push({ date: new Date(year, month + 1, nextMonthDay++), isCurrentMonth: false });
+  }
+  return cells;
+}
+
+function getCarryOverCountForDate(dateKey) {
+  const tasks = state.data.tasks[dateKey] || [];
+  return tasks.filter(t => t.isCarriedOver).length;
+}
+
+function getDayStatsForDate(dateKey) {
+  const records = state.data.records[dateKey] || [];
+  const tasks = state.data.tasks[dateKey] || [];
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const totalMinutes = records.reduce((s, r) => s + r.durationMinutes, 0);
+  const pomodoroCount = records.length;
+  const carryOver = tasks.filter(t => t.isCarriedOver).length;
+  return { totalTasks, completedTasks, totalMinutes, pomodoroCount, carryOver };
+}
+
+function renderCalendar() {
+  const cal = state.calendar;
+  if (cal.viewMode === 'month') {
+    el.calMonthView.style.display = 'flex';
+    el.calWeekView.style.display = 'none';
+    el.calZoomToggle.style.display = 'none';
+    renderMonthView();
+  } else {
+    el.calMonthView.style.display = 'none';
+    el.calWeekView.style.display = 'flex';
+    el.calZoomToggle.style.display = 'flex';
+    renderWeekView();
+  }
+  updateCalendarNavTitle();
+}
+
+function updateCalendarNavTitle() {
+  const cal = state.calendar;
+  if (cal.viewMode === 'month') {
+    el.calNavTitle.textContent = `${cal.viewYear}年${cal.viewMonth + 1}月`;
+  } else {
+    const weekStart = cal.viewWeekStart || getWeekStartForDate(new Date());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const sm = weekStart.getMonth() + 1;
+    const sd = weekStart.getDate();
+    const em = weekEnd.getMonth() + 1;
+    const ed = weekEnd.getDate();
+    el.calNavTitle.textContent = `${sm}月${sd}日 - ${em}月${ed}日`;
+  }
+}
+
+function renderMonthView() {
+  const cal = state.calendar;
+  const cells = getMonthData(cal.viewYear, cal.viewMonth);
+  const todayKey = getDateKey(new Date());
+  const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
+
+  let html = '<div class="cal-month-header">';
+  weekHeaders.forEach((h, i) => {
+    const isWeekend = i >= 5;
+    html += `<div class="cal-month-header-cell${isWeekend ? ' weekend' : ''}">${h}</div>`;
+  });
+  html += '</div><div class="cal-month-grid">';
+
+  cells.forEach(cell => {
+    const dateKey = getDateKey(cell.date);
+    const isToday = dateKey === todayKey;
+    const isWeekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
+    const isOtherMonth = !cell.isCurrentMonth;
+    const stats = getDayStatsForDate(dateKey);
+    const heatLevel = getHeatmapLevel(stats.totalMinutes);
+    const isHoliday = cal.holidaysEnabled && cal.holidays[dateKey];
+
+    let cls = 'cal-month-cell';
+    if (isOtherMonth) cls += ' other-month';
+    if (isWeekend) cls += ' weekend';
+    if (isToday) cls += ' today';
+    if (isHoliday) cls += ' holiday';
+
+    const progressPct = stats.totalTasks > 0 ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0;
+    const pomoDisplay = stats.pomodoroCount > 8 ? '8+' : stats.pomodoroCount;
+
+    html += `<div class="${cls}" data-date="${dateKey}">`;
+    html += `<div class="cal-day-number">${cell.date.getDate()}</div>`;
+    if (stats.carryOver > 0) {
+      html += `<span class="cal-day-carryover">顺延 ${stats.carryOver}</span>`;
+    }
+    if (stats.totalTasks > 0 || stats.pomodoroCount > 0) {
+      html += '<div class="cal-day-stats">';
+      if (stats.totalTasks > 0) {
+        html += `<div class="cal-day-progress">
+          <div class="cal-day-progress-bar"><div class="cal-day-progress-fill" style="width:${progressPct}%"></div></div>
+          <span class="cal-day-progress-text">${stats.completedTasks}/${stats.totalTasks}</span>
+        </div>`;
+      }
+      html += `<div style="display:flex;align-items:center;gap:6px;">
+        <span class="cal-day-heat level-${heatLevel}"></span>
+        <span class="cal-day-pomodoro"><span class="cal-day-pomodoro-icon">🍅</span>${pomoDisplay}</span>
+      </div>`;
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+
+  html += '</div>';
+  el.calMonthView.innerHTML = html;
+
+  el.calMonthView.querySelectorAll('.cal-month-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const dateKey = cell.dataset.date;
+      state.currentDate = dateKey;
+      el.datePicker.value = dateKey;
+      switchTab('tasks');
+    });
+
+    cell.addEventListener('mouseenter', (e) => {
+      const dateKey = cell.dataset.date;
+      const stats = getDayStatsForDate(dateKey);
+      const records = state.data.records[dateKey] || [];
+      const tasks = state.data.tasks[dateKey] || [];
+
+      if (stats.totalTasks === 0 && stats.pomodoroCount === 0) return;
+
+      const [y, m, d] = dateKey.split('-').map(Number);
+      const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+      const dayOfWeek = new Date(y, m - 1, d).getDay();
+
+      let tooltipHtml = `<div class="cal-tooltip-title">${m}月${d}日 星期${weekdays[dayOfWeek]}</div>`;
+      if (stats.totalTasks > 0) {
+        tooltipHtml += `<div class="cal-tooltip-row">📋 任务: ${stats.completedTasks}/${stats.totalTasks} 完成</div>`;
+      }
+      if (stats.carryOver > 0) {
+        tooltipHtml += `<div class="cal-tooltip-row" style="color:#c084fc;">⤴ 顺延: ${stats.carryOver} 个</div>`;
+      }
+      tooltipHtml += `<div class="cal-tooltip-row">⏱ 专注: ${stats.totalMinutes} 分钟</div>`;
+      tooltipHtml += `<div class="cal-tooltip-row">🍅 番茄: ${stats.pomodoroCount} 个</div>`;
+
+      if (records.length > 0) {
+        tooltipHtml += '<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.15);padding-top:4px;">';
+        records.slice(0, 3).forEach(r => {
+          const timeStr = formatTimeRange(r.startTime, r.durationMinutes);
+          const contentShort = (r.content || '').substring(0, 20);
+          tooltipHtml += `<div class="cal-tooltip-row" style="font-size:11px;">${timeStr} ${escapeHtml(contentShort)}</div>`;
+        });
+        if (records.length > 3) {
+          tooltipHtml += `<div class="cal-tooltip-row" style="font-size:11px;color:rgba(255,255,255,0.5);">...还有 ${records.length - 3} 条</div>`;
+        }
+        tooltipHtml += '</div>';
+      }
+
+      el.calTooltip.innerHTML = tooltipHtml;
+      el.calTooltip.style.display = 'block';
+
+      const rect = cell.getBoundingClientRect();
+      let left = rect.right + 8;
+      let top = rect.top;
+      if (left + 270 > window.innerWidth) {
+        left = rect.left - 270;
+      }
+      if (top + 200 > window.innerHeight) {
+        top = window.innerHeight - 200;
+      }
+      el.calTooltip.style.left = left + 'px';
+      el.calTooltip.style.top = top + 'px';
+    });
+
+    cell.addEventListener('mouseleave', () => {
+      el.calTooltip.style.display = 'none';
+    });
+  });
+}
+
+function renderWeekView() {
+  const cal = state.calendar;
+  const weekStart = cal.viewWeekStart || getWeekStartForDate(new Date());
+  const weekDates = getWeekDatesFromDate(weekStart);
+  const todayKey = getDateKey(new Date());
+  const zoom = cal.weekZoom;
+  const startHour = 8;
+  const endHour = 24;
+  const totalHours = endHour - startHour;
+  const totalSlots = (totalHours * 60) / zoom;
+  const slotHeight = Math.max(zoom * 1.2, 30);
+  const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
+
+  let headerHtml = '<div class="cal-week-header">';
+  headerHtml += '<div class="cal-week-header-spacer"></div>';
+  weekDates.forEach((d, i) => {
+    const dateKey = getDateKey(d);
+    const isToday = dateKey === todayKey;
+    const isWeekend = i >= 5;
+    const isHoliday = cal.holidaysEnabled && cal.holidays[dateKey];
+    let dayCls = 'cal-week-header-day';
+    if (isToday) dayCls += ' today';
+    if (isWeekend) dayCls += ' weekend';
+    headerHtml += `<div class="${dayCls}">
+      <span>${weekHeaders[i]}</span>
+      <span class="cal-week-header-date">${d.getDate()}</span>
+      ${isHoliday ? '<span style="color:#ef4444;font-size:10px;">假</span>' : ''}
+    </div>`;
+  });
+  headerHtml += '</div>';
+
+  let gridHtml = `<div class="cal-week-body" id="calWeekBody">
+    <div class="cal-week-grid" style="grid-template-columns:56px repeat(7,1fr);">`;
+
+  for (let slot = 0; slot < totalSlots; slot++) {
+    const minutesFromStart = slot * zoom;
+    const hour = startHour + Math.floor(minutesFromStart / 60);
+    const min = minutesFromStart % 60;
+    const showLabel = min === 0 || zoom <= 30;
+
+    gridHtml += `<div class="cal-week-time-cell" style="height:${slotHeight}px;">
+      ${showLabel ? `<span class="cal-week-time-label">${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}</span>` : ''}
+    </div>`;
+
+    weekDates.forEach((d, colIdx) => {
+      const dateKey = getDateKey(d);
+      const isWeekend = colIdx >= 5;
+      const isHoliday = cal.holidaysEnabled && cal.holidays[dateKey];
+      let cellCls = 'cal-week-day-cell';
+      if (isWeekend) cellCls += ' weekend';
+      if (isHoliday) cellCls += ' holiday';
+      gridHtml += `<div class="${cellCls}" style="height:${slotHeight}px;" data-date="${dateKey}" data-slot="${slot}" data-hour="${hour}" data-min="${min}"></div>`;
+    });
+  }
+
+  gridHtml += '</div></div>';
+
+  el.calWeekView.innerHTML = headerHtml + gridHtml;
+
+  requestAnimationFrame(() => {
+    const weekBody = document.getElementById('calWeekBody');
+    if (!weekBody) return;
+
+    const grid = weekBody.querySelector('.cal-week-grid');
+    if (!grid) return;
+
+    weekDates.forEach((d, colIdx) => {
+      const dateKey = getDateKey(d);
+      const records = state.data.records[dateKey] || [];
+
+      records.forEach(record => {
+        const startDate = new Date(record.startTime);
+        const recHour = startDate.getHours();
+        const recMin = startDate.getMinutes();
+        if (recHour < startHour) return;
+
+        const recMinutesFromStart = (recHour - startHour) * 60 + recMin;
+        const topSlot = recMinutesFromStart / zoom;
+        const heightSlots = record.durationMinutes / zoom;
+        const topPx = topSlot * slotHeight;
+        const heightPx = Math.max(heightSlots * slotHeight - 2, 20);
+
+        const cellSelector = `.cal-week-day-cell[data-date="${dateKey}"][data-slot="0"]`;
+        const firstCell = weekBody.querySelector(cellSelector);
+        if (!firstCell) return;
+
+        const colWidth = firstCell.offsetWidth;
+        const gridRect = grid.getBoundingClientRect();
+        const firstCellRect = firstCell.getBoundingClientRect();
+        const timeCellWidth = 56;
+
+        const leftPx = timeCellWidth + colIdx * colWidth + 2;
+        const widthPx = colWidth - 4;
+
+        const card = document.createElement('div');
+        card.className = 'cal-week-pomodoro-card';
+        card.style.top = topPx + 'px';
+        card.style.height = heightPx + 'px';
+        card.style.width = widthPx + 'px';
+        card.style.left = leftPx + 'px';
+
+        const taskShort = record.taskName ? record.taskName.substring(0, 4) : '';
+        const contentShort = (record.content || '').substring(0, 10);
+
+        card.innerHTML = `${taskShort ? `<div class="card-task">${escapeHtml(taskShort)}</div>` : ''}<div class="card-content">${escapeHtml(contentShort)}</div>`;
+        card.title = `${formatTimeRange(record.startTime, record.durationMinutes)}\n${record.taskName ? record.taskName + ' - ' : ''}${record.content}`;
+
+        grid.style.position = 'relative';
+        grid.appendChild(card);
+      });
+    });
+
+    weekBody.querySelectorAll('.cal-week-day-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const dateKey = cell.dataset.date;
+        const hour = parseInt(cell.dataset.hour, 10);
+        const min = parseInt(cell.dataset.min, 10);
+        openQuickRecordModal(dateKey, hour, min);
+      });
+    });
+
+    const now = new Date();
+    const nowKey = getDateKey(now);
+    const nowHour = now.getHours();
+    const nowMin = now.getMinutes();
+    if (nowHour >= startHour && nowHour < endHour) {
+      const weekStartForNow = getWeekStartForDate(now);
+      if (getDateKey(weekStartForNow) === getDateKey(weekStart)) {
+        const nowMinutesFromStart = (nowHour - startHour) * 60 + nowMin;
+        const scrollPos = Math.max(0, (nowMinutesFromStart / zoom) * slotHeight - weekBody.clientHeight / 3);
+        weekBody.scrollTop = scrollPos;
+      }
+    }
+  });
+}
+
+function openQuickRecordModal(dateKey, hour, min) {
+  state.calendar.quickRecordDate = dateKey;
+  el.qrDateInput.value = dateKey;
+  el.qrStartTime.value = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  el.qrDuration.value = '25';
+  el.qrContent.value = '';
+
+  const tasks = state.data.tasks[dateKey] || [];
+  const incompleteTasks = tasks.filter(t => t.status !== 'completed');
+  el.qrTaskSelect.innerHTML = '<option value="">不关联任务</option>';
+  incompleteTasks.forEach(task => {
+    const option = document.createElement('option');
+    option.value = task.id;
+    option.textContent = task.name;
+    el.qrTaskSelect.appendChild(option);
+  });
+
+  el.quickRecordModal.style.display = 'flex';
+  setTimeout(() => el.qrContent.focus(), 100);
+}
+
+function saveQuickRecordHandler() {
+  const dateKey = el.qrDateInput.value;
+  const startTimeStr = el.qrStartTime.value;
+  const duration = parseInt(el.qrDuration.value, 10);
+  const content = el.qrContent.value.trim();
+  const taskId = el.qrTaskSelect.value || null;
+
+  if (!dateKey || !startTimeStr || isNaN(duration) || duration < 1) {
+    el.qrContent.focus();
+    return;
+  }
+
+  const [h, m] = startTimeStr.split(':').map(Number);
+  const [y, mon, d] = dateKey.split('-').map(Number);
+  const startMs = new Date(y, mon - 1, d, h, m).getTime();
+
+  let taskName = '';
+  if (taskId) {
+    const tasks = state.data.tasks[dateKey] || [];
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      taskName = task.name;
+      task.completedPomodoros = (task.completedPomodoros || 0) + 1;
+      if (task.status === 'todo') task.status = 'inProgress';
+    }
+  }
+
+  const record = {
+    id: Date.now().toString(),
+    startTime: startMs,
+    durationMinutes: duration,
+    content: content || '（补录）',
+    taskId,
+    taskName,
+  };
+
+  if (!state.data.records[dateKey]) {
+    state.data.records[dateKey] = [];
+  }
+  state.data.records[dateKey].push(record);
+  state.data.records[dateKey].sort((a, b) => a.startTime - b.startTime);
+
+  persistData();
+  el.quickRecordModal.style.display = 'none';
+
+  if (state.activeTab === 'calendar') {
+    renderCalendar();
+  }
+  if (dateKey === state.currentDate) {
+    renderAll();
+  }
+}
+
+function navigateCalendar(direction) {
+  const cal = state.calendar;
+  if (cal.viewMode === 'month') {
+    cal.viewMonth += direction;
+    if (cal.viewMonth > 11) {
+      cal.viewMonth = 0;
+      cal.viewYear++;
+    } else if (cal.viewMonth < 0) {
+      cal.viewMonth = 11;
+      cal.viewYear--;
+    }
+  } else {
+    const currentStart = cal.viewWeekStart || getWeekStartForDate(new Date());
+    currentStart.setDate(currentStart.getDate() + direction * 7);
+    cal.viewWeekStart = new Date(currentStart);
+  }
+  renderCalendar();
+}
+
+function goCalendarToday() {
+  const cal = state.calendar;
+  const now = new Date();
+  if (cal.viewMode === 'month') {
+    cal.viewYear = now.getFullYear();
+    cal.viewMonth = now.getMonth();
+  } else {
+    cal.viewWeekStart = getWeekStartForDate(now);
+  }
+  renderCalendar();
+}
+
+function switchCalendarView(viewMode) {
+  state.calendar.viewMode = viewMode;
+  el.calViewBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === viewMode);
+  });
+  if (viewMode === 'week' && !state.calendar.viewWeekStart) {
+    state.calendar.viewWeekStart = getWeekStartForDate(new Date());
+  }
+  renderCalendar();
+}
+
+function setupCalendarControls() {
+  el.calPrevBtn.addEventListener('click', () => navigateCalendar(-1));
+  el.calNextBtn.addEventListener('click', () => navigateCalendar(1));
+  el.calTodayBtn.addEventListener('click', goCalendarToday);
+
+  el.calViewBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchCalendarView(btn.dataset.view));
+  });
+
+  el.calZoomBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.calendar.weekZoom = parseInt(btn.dataset.zoom, 10);
+      el.calZoomBtns.forEach(b => b.classList.toggle('active', b.dataset.zoom === btn.dataset.zoom));
+      renderWeekView();
+    });
+  });
+
+  el.cancelQuickRecord.addEventListener('click', () => {
+    el.quickRecordModal.style.display = 'none';
+  });
+
+  el.saveQuickRecord.addEventListener('click', saveQuickRecordHandler);
+
+  el.qrContent.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      saveQuickRecordHandler();
+    } else if (e.key === 'Escape') {
+      el.quickRecordModal.style.display = 'none';
+    }
+  });
+
+  el.quickRecordModal.addEventListener('click', (e) => {
+    if (e.target === el.quickRecordModal) {
+      el.quickRecordModal.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (el.calTooltip.style.display === 'block') {
+      const tooltipRect = el.calTooltip.getBoundingClientRect();
+      if (e.clientX < tooltipRect.left - 20 || e.clientX > tooltipRect.right + 20 ||
+          e.clientY < tooltipRect.top - 20 || e.clientY > tooltipRect.bottom + 20) {
+        el.calTooltip.style.display = 'none';
+      }
+    }
+  });
+}
+
+function renderCalendarNavTitle() {
+  updateCalendarNavTitle();
+}
+
 async function init() {
   try {
     state.data = await ipcRenderer.invoke('load-data');
@@ -2122,6 +2670,7 @@ async function init() {
   setupSettings();
   setupShortcutInputs();
   setupStatsModal();
+  setupCalendarControls();
   updateTimerDisplay();
   renderAll();
   syncTimerState();

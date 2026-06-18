@@ -84,6 +84,7 @@
           <div class="tab-switcher">
             <button class="tab-btn active" data-tab="tasks">任务</button>
             <button class="tab-btn" data-tab="records">日记</button>
+            <button class="tab-btn" data-tab="calendar">日历</button>
           </div>
           <input type="date" id="datePicker" class="date-picker" />
         </div>
@@ -101,6 +102,32 @@
 
       <div class="tab-content" id="recordsTab" style="display:none;">
         <div class="records-container" id="recordsContainer"></div>
+      </div>
+
+      <div class="tab-content" id="calendarTab" style="display:none;">
+        <div class="calendar-toolbar">
+          <div class="calendar-nav">
+            <button class="calendar-nav-btn" id="calPrevBtn" title="上一个">‹</button>
+            <span class="calendar-nav-title" id="calNavTitle"></span>
+            <button class="calendar-nav-btn" id="calNextBtn" title="下一个">›</button>
+          </div>
+          <div class="calendar-toolbar-right">
+            <button class="cal-today-btn" id="calTodayBtn">回到今天</button>
+            <div class="cal-view-toggle">
+              <button class="cal-view-btn active" data-view="month">月视图</button>
+              <button class="cal-view-btn" data-view="week">周视图</button>
+            </div>
+            <div class="cal-zoom-toggle" id="calZoomToggle" style="display:none;">
+              <button class="cal-zoom-btn active" data-zoom="60">1小时</button>
+              <button class="cal-zoom-btn" data-zoom="30">30分</button>
+              <button class="cal-zoom-btn" data-zoom="15">15分</button>
+            </div>
+          </div>
+        </div>
+        <div class="calendar-body" id="calendarBody">
+          <div class="cal-month-view" id="calMonthView"></div>
+          <div class="cal-week-view" id="calWeekView" style="display:none;"></div>
+        </div>
       </div>
     </main>
 
@@ -179,6 +206,46 @@
       <div class="modal-actions">
         <button class="modal-btn cancel" id="cancelEdit">取消</button>
         <button class="modal-btn confirm" id="saveEdit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 日历 Tooltip -->
+  <div class="cal-tooltip" id="calTooltip" style="display:none;"></div>
+
+  <!-- 日历快速补录弹窗 -->
+  <div class="modal-overlay" id="quickRecordModal" style="display:none;">
+    <div class="modal">
+      <h3 class="modal-title">补录已完成的番茄钟</h3>
+      <div class="quick-record-form">
+        <div class="form-group">
+          <label class="form-label">日期</label>
+          <input type="date" id="qrDateInput" class="form-input" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">开始时间</label>
+            <input type="time" id="qrStartTime" class="form-input" value="09:00" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">时长（分钟）</label>
+            <input type="number" id="qrDuration" class="form-input" min="1" max="120" value="25" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">内容</label>
+          <input type="text" id="qrContent" class="form-input" placeholder="一句话记录..." maxlength="200" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">关联任务</label>
+          <select id="qrTaskSelect" class="form-input">
+            <option value="">不关联任务</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="cancelQuickRecord">取消</button>
+        <button class="modal-btn confirm" id="saveQuickRecord">保存</button>
       </div>
     </div>
   </div>
