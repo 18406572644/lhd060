@@ -11,7 +11,7 @@
 </head>
 <body>
   <div class="app" id="app">
-    <!-- 左栏 番茄钟 -->
+    <!-- 左栏 番茄钟 & 项目 -->
     <aside class="sidebar">
       <div class="pomodoro-section">
         <div class="header-row">
@@ -73,39 +73,41 @@
           <span class="today-label">今日番茄</span>
           <div class="tomatoes" id="tomatoes"></div>
         </div>
+      </div>
 
-        <div class="project-selector-section">
-          <div class="project-selector-header">
-            <h3 class="project-selector-title">项目选择器</h3>
-            <button class="project-collapse-btn" id="projectCollapseBtn" title="折叠/展开">▼</button>
+      <div class="project-selector-section">
+        <div class="project-selector-header">
+          <h3 class="project-selector-title">项目</h3>
+          <button class="project-collapse-btn" id="projectCollapseBtn" title="折叠/展开">▼</button>
+        </div>
+        <div class="project-list-container" id="projectListContainer">
+          <div class="project-actions top-actions">
+            <button class="project-action-btn primary full-width" id="addProjectBtn">
+              <span class="project-action-icon">+</span>
+              <span class="project-action-label">新增项目</span>
+            </button>
           </div>
-          <div class="project-list-container" id="projectListContainer">
-            <div class="project-list" id="projectList">
-              <div class="project-item active" data-project-id="all">
-                <span class="project-color-dot" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></span>
-                <span class="project-name">所有项目</span>
-                <span class="project-task-count" id="allProjectCount">0</span>
-              </div>
-              <div class="project-item" data-project-id="none">
-                <span class="project-color-dot" style="background: #9ca3af;"></span>
-                <span class="project-name">无项目</span>
-                <span class="project-task-count" id="noneProjectCount">0</span>
-              </div>
+          <div class="project-list" id="projectList">
+            <div class="project-item active" data-project-id="all">
+              <span class="project-color-dot" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></span>
+              <span class="project-name">所有项目</span>
+              <span class="project-task-count" id="allProjectCount">0</span>
             </div>
-            <div class="project-actions">
-              <button class="project-action-btn primary" id="addProjectBtn">
-                <span class="project-action-icon">+</span>
-                <span class="project-action-label">新增项目</span>
-              </button>
-              <button class="project-action-btn" id="manageProjectsBtn">
-                <span class="project-action-icon">⚙</span>
-                <span class="project-action-label">管理项目</span>
-              </button>
-              <button class="project-action-btn" id="projectDashboardBtn">
-                <span class="project-action-icon">📊</span>
-                <span class="project-action-label">项目仪表盘</span>
-              </button>
+            <div class="project-item" data-project-id="none">
+              <span class="project-color-dot" style="background: #9ca3af;"></span>
+              <span class="project-name">无项目</span>
+              <span class="project-task-count" id="noneProjectCount">0</span>
             </div>
+          </div>
+          <div class="project-actions">
+            <button class="project-action-btn" id="manageProjectsBtn">
+              <span class="project-action-icon">⚙</span>
+              <span class="project-action-label">管理项目</span>
+            </button>
+            <button class="project-action-btn" id="projectDashboardBtn">
+              <span class="project-action-icon">📊</span>
+              <span class="project-action-label">项目仪表盘</span>
+            </button>
           </div>
         </div>
       </div>

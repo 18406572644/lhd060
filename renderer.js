@@ -894,7 +894,7 @@ function renderProjectSelector() {
     el.projectList.appendChild(item);
   });
 
-  el.projectListContainer.style.display = state.projectSelectorCollapsed ? 'none' : 'block';
+  el.projectListContainer.classList.toggle('collapsed', state.projectSelectorCollapsed);
 }
 
 function renderTaskProjectSelect() {
@@ -962,7 +962,7 @@ function selectProject(projectId) {
 
 function toggleProjectSelector() {
   state.projectSelectorCollapsed = !state.projectSelectorCollapsed;
-  el.projectListContainer.style.display = state.projectSelectorCollapsed ? 'none' : 'block';
+  el.projectListContainer.classList.toggle('collapsed', state.projectSelectorCollapsed);
   el.projectCollapseBtn.textContent = state.projectSelectorCollapsed ? '▶' : '▼';
 }
 
@@ -1415,83 +1415,100 @@ function renderProjectDetailCard(projectId) {
   const card = document.createElement('div');
   card.className = 'project-detail-card';
 
-  const statusColors = {
-    'on-track': '#22c55e',
-    'warning': '#f59e0b',
-    'danger': '#ef4444',
+  const warningClassMap = {
+    'on-track': 'warning-success',
+    'warning': 'warning-warning',
+    'danger': 'warning-danger',
   };
 
-  const statusBgColors = {
-    'on-track': 'rgba(34, 197, 94, 0.1)',
-    'warning': 'rgba(245, 158, 11, 0.1)',
-    'danger': 'rgba(239, 68, 68, 0.1)',
+  const warningIconMap = {
+    'on-track': '✅',
+    'warning': '⚠️',
+    'danger': '🚨',
+  };
+
+  const warningStatusMap = {
+    'on-track': '进度正常',
+    'warning': '需要关注',
+    'danger': '有延期风险',
   };
 
   card.innerHTML = `
     <div class="project-detail-header">
-      <div class="project-detail-title">
-        <div class="project-detail-color" style="background: ${project.color};"></div>
-        <h3>${escapeHtml(project.name)}</h3>
-        <span class="project-detail-status" style="color: ${statusColors[prediction.status]}; background: ${statusBgColors[prediction.status]};">
-          ${prediction.status === 'on-track' ? '正常' : prediction.status === 'warning' ? '预警' : '延期'}
-        </span>
+      <div class="project-detail-title-row">
+        <span class="project-detail-color-dot" style="background: ${project.color};"></span>
+        <h5 class="project-detail-title">${escapeHtml(project.name)}</h5>
+        <span class="project-detail-progress">${stats.pomodoroProgress}%</span>
       </div>
-      ${project.description ? `<p class="project-detail-desc">${escapeHtml(project.description)}</p>` : ''}
-    </div>
-
-    <div class="project-detail-stats">
-      <div class="project-detail-stat">
-        <div class="project-detail-stat-value">${stats.pomodoroProgress}%</div>
-        <div class="project-detail-stat-label">完成进度</div>
-      </div>
-      <div class="project-detail-stat">
-        <div class="project-detail-stat-value">${stats.completedTasks}/${stats.totalTasks}</div>
-        <div class="project-detail-stat-label">任务完成</div>
-      </div>
-      <div class="project-detail-stat">
-        <div class="project-detail-stat-value">${stats.totalCompletedPomodoros}/${stats.totalEstimatedPomodoros}</div>
-        <div class="project-detail-stat-label">番茄完成</div>
-      </div>
-      <div class="project-detail-stat">
-        <div class="project-detail-stat-value">${prediction.daysLeft !== null ? prediction.daysLeft + '天' : '未设置'}</div>
-        <div class="project-detail-stat-label">剩余时间</div>
+      <div class="project-detail-progress-bar">
+        <div class="project-detail-progress-fill" style="width: ${stats.pomodoroProgress}%; background: ${project.color};"></div>
       </div>
     </div>
 
-    <div class="project-detail-warning" style="border-left: 3px solid ${statusColors[prediction.status]}; background: ${statusBgColors[prediction.status]};">
-      <span style="color: ${statusColors[prediction.status]};">⚠️</span>
-      <span>${prediction.message}</span>
-    </div>
-
-    <div class="project-detail-section">
-      <h4>🔥 燃尽图</h4>
-      <canvas class="project-burndown-chart" id="burndown_${projectId}" width="300" height="120"></canvas>
-    </div>
-
-    <div class="project-detail-section">
-      <h4>🏷️ 标签分布</h4>
-      <div class="project-tag-distribution">
-        ${tagDist.length > 0 ? tagDist.map(tag => `
-          <div class="project-tag-item">
-            <span class="project-tag-name">#${tag.tag}</span>
-            <span class="project-tag-minutes">${tag.minutes}分钟</span>
-            <div class="project-tag-bar">
-              <div class="project-tag-bar-fill" style="width: ${Math.min(100, tag.minutes / Math.max(...tagDist.map(t => t.minutes)) * 100)}%;"></div>
-            </div>
+    <div class="project-detail-body">
+      <div class="project-detail-section">
+        <h6 class="project-detail-section-title">项目概览</h6>
+        <div class="project-stats-overview">
+          <div class="project-stat-card">
+            <div class="project-stat-label">任务进度</div>
+            <div class="project-stat-value">${stats.completedTasks}/${stats.totalTasks}</div>
           </div>
-        `).join('') : '<div class="project-tag-empty">暂无标签数据</div>'}
-      </div>
-    </div>
-
-    <div class="project-detail-section">
-      <h4>🍅 最近番茄记录</h4>
-      <div class="project-pomodoro-list">
-        ${recentPomodoros.length > 0 ? recentPomodoros.map(record => `
-          <div class="project-pomodoro-item">
-            <div class="project-pomodoro-time">${formatTimeRange(record.startTime, record.durationMinutes)}</div>
-            <div class="project-pomodoro-content">${escapeHtml(record.content || '（未填写）')}</div>
+          <div class="project-stat-card">
+            <div class="project-stat-label">番茄进度</div>
+            <div class="project-stat-value">${stats.totalCompletedPomodoros}/${stats.totalEstimatedPomodoros}</div>
           </div>
-        `).join('') : '<div class="project-pomodoro-empty">暂无番茄记录</div>'}
+          <div class="project-stat-card">
+            <div class="project-stat-label">剩余天数</div>
+            <div class="project-stat-value">${prediction.daysLeft !== null ? prediction.daysLeft : '未设'}</div>
+          </div>
+        </div>
+        <div class="project-warnings">
+          <div class="warning-item ${warningClassMap[prediction.status]}">
+            <span class="warning-icon">${warningIconMap[prediction.status]}</span>
+            <span class="warning-text">${warningStatusMap[prediction.status]}：${prediction.message}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="project-detail-section">
+        <h6 class="project-detail-section-title">🔥 燃尽图</h6>
+        <div class="burndown-chart-container">
+          <canvas class="burndown-chart" id="burndown_${projectId}" width="350" height="120"></canvas>
+        </div>
+      </div>
+
+      <div class="project-detail-row">
+        <div class="project-detail-section">
+          <h6 class="project-detail-section-title">🏷️ 标签分布</h6>
+          <div class="tag-distribution-container">
+            ${tagDist.length > 0 ? `
+              <div class="recent-pomodoro-list">
+                ${tagDist.slice(0, 5).map(tag => `
+                  <div class="recent-pomodoro-item">
+                    <span class="recent-pomodoro-time">#${tag.tag}</span>
+                    <span class="recent-pomodoro-content">${tag.minutes}分钟 (${tag.count}次)</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : '<div class="project-tag-empty" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">暂无标签数据</div>'}
+          </div>
+        </div>
+
+        <div class="project-detail-section">
+          <h6 class="project-detail-section-title">🍅 最近记录</h6>
+          <div class="pomodoro-records-container">
+            ${recentPomodoros.length > 0 ? `
+              <div class="recent-pomodoro-list">
+                ${recentPomodoros.map(record => `
+                  <div class="recent-pomodoro-item">
+                    <span class="recent-pomodoro-time">${formatTimeRange(record.startTime, record.durationMinutes)}</span>
+                    <span class="recent-pomodoro-content">${escapeHtml(record.content || '（未填写）')}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : '<div class="project-tag-empty" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">暂无番茄记录</div>'}
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -1548,14 +1565,19 @@ function renderProjectDetailCard(projectId) {
         ctx.font = '10px DM Mono';
         ctx.textAlign = 'center';
         if (dates.length > 0) {
-          ctx.fillText(dates[0], padding.left, canvas.height - 5);
-          ctx.fillText(dates[dates.length - 1], canvas.width - padding.right, canvas.height - 5);
+          ctx.fillText(dates[0], padding.left + 20, canvas.height - 5);
+          ctx.fillText(dates[dates.length - 1], canvas.width - padding.right - 20, canvas.height - 5);
         }
 
         ctx.fillStyle = '#999';
         ctx.textAlign = 'right';
         ctx.fillText(String(maxVal), padding.left - 5, padding.top + 5);
         ctx.fillText('0', padding.left - 5, canvas.height - padding.bottom);
+      } else {
+        ctx.fillStyle = '#ccc';
+        ctx.font = '11px DM Sans';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无历史数据', canvas.width / 2, canvas.height / 2);
       }
     }
   });
