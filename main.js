@@ -22,12 +22,14 @@ function loadData() {
       const data = JSON.parse(raw);
       if (!data.tasks) data.tasks = {};
       if (!data.lastActiveDate) data.lastActiveDate = null;
+      if (!data.customPresets) data.customPresets = [];
+      if (!data.projects) data.projects = [];
       return data;
     }
   } catch (e) {
     console.error('加载数据失败:', e);
   }
-  return { records: {}, tasks: {}, lastActiveDate: null };
+  return { records: {}, tasks: {}, lastActiveDate: null, customPresets: [], projects: [] };
 }
 
 function saveData(data) {

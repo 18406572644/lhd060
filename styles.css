@@ -2402,3 +2402,1094 @@ html, body {
 .quick-record-form {
   margin-bottom: 20px;
 }
+
+/* ===== 项目管理样式 ===== */
+
+/* 项目选择器 */
+.project-selector-section {
+  width: 100%;
+  max-width: 340px;
+  margin-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 20px;
+}
+
+.project-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.project-selector-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.project-collapse-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.project-list-container {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.project-list-container.collapsed {
+  max-height: 0;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.project-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.project-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.project-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.project-item.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.project-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-item.active .project-name {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.project-task-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.project-item.active .project-task-count {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.project-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.project-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.project-action-icon {
+  font-size: 14px;
+}
+
+/* 视图切换按钮 */
+.view-toggle {
+  display: flex;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 0;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-toggle-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-toggle-icon {
+  font-size: 14px;
+}
+
+/* 项目视图分组 */
+.project-group {
+  margin-bottom: 20px;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.project-group:hover {
+  border-color: #e0e0e0;
+}
+
+.project-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #fafafa;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.project-group-header:hover {
+  background: #f5f5f5;
+}
+
+.project-group-header.collapsed {
+  border-bottom: none;
+}
+
+.project-group-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-group-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.project-group-progress {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-group-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.project-group-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.project-group-progress-text {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #666;
+  min-width: 100px;
+  text-align: right;
+}
+
+.project-group-remaining {
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+}
+
+.project-group-remaining strong {
+  color: #1a1a2e;
+}
+
+.project-group-collapse-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  transition: transform 0.2s;
+  font-size: 12px;
+}
+
+.project-group-header.collapsed .project-group-collapse-icon {
+  transform: rotate(-90deg);
+}
+
+.project-group-tasks {
+  padding: 12px 20px;
+  background: #fff;
+}
+
+.project-group-tasks.collapsed {
+  display: none;
+}
+
+.project-group-tasks .task-card {
+  margin-bottom: 8px;
+}
+
+.project-group-tasks .task-card:last-child {
+  margin-bottom: 0;
+}
+
+/* 无项目分组 */
+.project-group.no-project .project-group-color {
+  background: repeating-linear-gradient(
+    45deg,
+    #d1d5db,
+    #d1d5db 3px,
+    #e5e7eb 3px,
+    #e5e7eb 6px
+  );
+}
+
+/* 项目仪表盘 Tab */
+#projectDashboardTab {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-dashboard-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 40px;
+}
+
+.project-dashboard-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.project-dashboard-container::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.dashboard-tab-switcher {
+  display: flex;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 24px;
+  gap: 0;
+  width: fit-content;
+}
+
+.dashboard-tab-btn {
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dashboard-tab-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-section {
+  margin-bottom: 32px;
+}
+
+.dashboard-section-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 16px;
+}
+
+/* 项目总览进度图 */
+.project-progress-chart {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.project-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.project-progress-item:last-child {
+  margin-bottom: 0;
+}
+
+.project-progress-item-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-progress-item-name {
+  width: 150px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a2e;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-progress-item-bar {
+  flex: 1;
+  height: 24px;
+  background: #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.project-progress-item-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.5s ease;
+}
+
+.project-progress-item-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a2e;
+  z-index: 1;
+}
+
+.project-progress-item-stats {
+  width: 120px;
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+/* 项目详情卡片 */
+.project-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.project-detail-card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.project-detail-card:hover {
+  border-color: #e0e0e0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.project-detail-header {
+  padding: 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.project-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.project-detail-color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-detail-title {
+  flex: 1;
+  font-family: 'Source Serif 4', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.project-detail-progress {
+  font-family: 'DM Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.project-detail-progress-bar {
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.project-detail-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.project-detail-body {
+  padding: 20px;
+}
+
+.project-detail-section {
+  margin-bottom: 20px;
+}
+
+.project-detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.project-detail-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.project-detail-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.burndown-chart-container,
+.tag-distribution-container,
+.pomodoro-records-container {
+  height: 160px;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* 项目统计概览 */
+.project-stats-overview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.project-stat-card {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.project-stat-label {
+  font-size: 11px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.project-stat-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+/* 进度预警 */
+.project-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.warning-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.warning-item.warning-info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.warning-item.warning-success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.warning-item.warning-warning {
+  background: #fefce8;
+  color: #854d0e;
+  border: 1px solid #fef08a;
+}
+
+.warning-item.warning-danger {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.warning-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.warning-text {
+  flex: 1;
+}
+
+/* 最近番茄记录列表 */
+.recent-pomodoro-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.recent-pomodoro-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.recent-pomodoro-list::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 2px;
+}
+
+.recent-pomodoro-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.recent-pomodoro-time {
+  font-family: 'DM Mono', monospace;
+  color: #22c55e;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.recent-pomodoro-content {
+  flex: 1;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-pomodoro-duration {
+  font-family: 'DM Mono', monospace;
+  color: #999;
+  flex-shrink: 0;
+}
+
+/* 项目管理弹窗 */
+.project-modal {
+  width: 700px;
+  max-width: 95vw;
+}
+
+.project-management-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.project-list-section,
+.project-form-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 16px;
+}
+
+.project-management-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 350px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.project-management-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.project-management-list::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.project-management-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.project-management-item:hover {
+  background: #f5f5f5;
+}
+
+.project-management-item-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-management-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-management-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a2e;
+  margin-bottom: 2px;
+}
+
+.project-management-item-desc {
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-management-item-stats {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.project-management-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.project-management-item-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: #666;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.project-management-item-btn:hover {
+  background: #e8e8e8;
+  color: #333;
+}
+
+.project-management-item-btn.delete:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.project-form {
+  flex: 1;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* 颜色选择器 */
+.color-picker {
+  width: 100%;
+}
+
+.color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.color-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.color-option input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-dot {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.color-option input:checked + .color-dot {
+  border-color: #1a1a2e;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(26, 26, 46, 0.1);
+}
+
+.color-option:hover .color-dot {
+  transform: scale(1.1);
+}
+
+/* 统计过滤 */
+.stats-filter-row {
+  padding: 0 30px;
+  margin-bottom: 0;
+}
+
+.stats-filter-row .form-group {
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stats-filter-row .form-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.stats-filter-row .form-input {
+  width: 200px;
+  margin-bottom: 0;
+}
+
+/* 项目仪表盘弹窗 */
+.project-dashboard-overlay {
+  align-items: center;
+  justify-content: center;
+}
+
+.project-dashboard-modal {
+  width: 1000px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.project-dashboard-modal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.project-dashboard-modal::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 4px;
+}
+
+.dashboard-modal-tab-switcher {
+  display: flex;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 3px;
+  margin: 0 24px 20px;
+  width: fit-content;
+}
+
+.dashboard-modal-tab-btn {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dashboard-modal-tab-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-modal-tab-content {
+  padding: 0 24px 24px;
+}
+
+.project-progress-bars {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* 标签分布小图 */
+.tag-distribution-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.tag-distribution-mini::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tag-distribution-mini::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 2px;
+}
+
+.tag-distribution-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.tag-distribution-name {
+  width: 80px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-distribution-bar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tag-distribution-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.tag-distribution-value {
+  width: 40px;
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  color: #999;
+}
+
+/* 番茄钟预估对比 */
+.pomodoro-compare {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.pomodoro-compare-item {
+  text-align: center;
+}
+
+.pomodoro-compare-label {
+  font-size: 11px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.pomodoro-compare-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.pomodoro-compare-divider {
+  font-size: 24px;
+  color: #ddd;
+}
+
+.pomodoro-compare-item.estimated .pomodoro-compare-value {
+  color: #3b82f6;
+}
+
+.pomodoro-compare-item.actual .pomodoro-compare-value {
+  color: #22c55e;
+}
+
+/* 目标日期显示 */
+.project-target-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+}
+
+.project-target-date-icon {
+  font-size: 14px;
+}
+
+.project-target-date-value {
+  font-weight: 500;
+}
+
+/* 响应式调整 */
+@media (max-width: 900px) {
+  .project-management-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .project-management-list {
+    max-height: 200px;
+  }
+
+  .project-cards-container {
+    grid-template-columns: 1fr;
+  }
+
+  .project-detail-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

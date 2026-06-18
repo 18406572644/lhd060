@@ -15,7 +15,7 @@ let state = {
   isRunning: false,
   timerId: null,
   startTime: null,
-  data: { records: {}, tasks: {}, lastActiveDate: null, customPresets: [] },
+  data: { records: {}, tasks: {}, lastActiveDate: null, customPresets: [], projects: [] },
   currentDate: getDateKey(new Date()),
   editingRecordId: null,
   editingDateKey: null,
@@ -26,6 +26,10 @@ let state = {
     trend: null,
     hour: null,
     tag: null,
+    burndown: {},
+    tagDist: {},
+    pomodoroRecords: {},
+    projectProgress: null,
   },
   trendPeriod: '30days',
   currentTaskId: null,
@@ -45,6 +49,15 @@ let state = {
     holidaysEnabled: false,
     quickRecordDate: null,
   },
+  tasksViewMode: 'list',
+  selectedProjectId: 'all',
+  projectSelectorCollapsed: false,
+  editingProjectId: null,
+  tempProjectColor: '#22c55e',
+  dashboardTab: 'overview',
+  dashboardModalTab: 'overview',
+  statsProjectFilter: '',
+  collapsedProjects: {},
 };
 
 const el = {
@@ -104,6 +117,7 @@ const el = {
   taskModalTitle: document.getElementById('taskModalTitle'),
   taskNameInput: document.getElementById('taskNameInput'),
   taskPrioritySelect: document.getElementById('taskPrioritySelect'),
+  taskProjectSelect: document.getElementById('taskProjectSelect'),
   pomodoroMinus: document.getElementById('pomodoroMinus'),
   pomodoroPlus: document.getElementById('pomodoroPlus'),
   pomodoroCountDisplay: document.getElementById('pomodoroCountDisplay'),
@@ -142,6 +156,37 @@ const el = {
   qrTaskSelect: document.getElementById('qrTaskSelect'),
   cancelQuickRecord: document.getElementById('cancelQuickRecord'),
   saveQuickRecord: document.getElementById('saveQuickRecord'),
+  projectCollapseBtn: document.getElementById('projectCollapseBtn'),
+  projectListContainer: document.getElementById('projectListContainer'),
+  projectList: document.getElementById('projectList'),
+  manageProjectsBtn: document.getElementById('manageProjectsBtn'),
+  projectDashboardBtn: document.getElementById('projectDashboardBtn'),
+  allProjectCount: document.getElementById('allProjectCount'),
+  noneProjectCount: document.getElementById('noneProjectCount'),
+  viewToggleBtns: document.querySelectorAll('.view-toggle-btn'),
+  projectDashboardTab: document.getElementById('projectDashboardTab'),
+  dashboardTabBtns: document.querySelectorAll('.dashboard-tab-btn'),
+  dashboardOverviewTab: document.getElementById('dashboardOverviewTab'),
+  dashboardDetailTab: document.getElementById('dashboardDetailTab'),
+  projectProgressChart: document.getElementById('projectProgressChart'),
+  projectCardsContainer: document.getElementById('projectCardsContainer'),
+  projectModal: document.getElementById('projectModal'),
+  closeProjectModal: document.getElementById('closeProjectModal'),
+  projectManagementList: document.getElementById('projectManagementList'),
+  projectFormTitle: document.getElementById('projectFormTitle'),
+  projectNameInput: document.getElementById('projectNameInput'),
+  projectDescInput: document.getElementById('projectDescInput'),
+  projectTargetDate: document.getElementById('projectTargetDate'),
+  cancelProject: document.getElementById('cancelProject'),
+  saveProject: document.getElementById('saveProject'),
+  projectDashboardModal: document.getElementById('projectDashboardModal'),
+  closeProjectDashboardModal: document.getElementById('closeProjectDashboardModal'),
+  dashboardModalTabBtns: document.querySelectorAll('.dashboard-modal-tab-btn'),
+  dashboardModalOverviewTab: document.getElementById('dashboardModalOverviewTab'),
+  dashboardModalDetailTab: document.getElementById('dashboardModalDetailTab'),
+  projectProgressBars: document.getElementById('projectProgressBars'),
+  projectDetailCards: document.getElementById('projectDetailCards'),
+  statsProjectFilter: document.getElementById('statsProjectFilter'),
 };
 
 function getDateKey(d) {
@@ -413,7 +458,1162 @@ function generateTaskId() {
   return 'task_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-function addTask(name, estimatedPomodoros, priority) {
+function generateProjectId() {
+  return 'proj_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function addProject(name, description, color, targetDate) {
+  const project = {
+    id: generateProjectId(),
+    name: name.trim(),
+    description: description || '',
+    color: color || '#22c55e',
+    targetDate: targetDate || null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (!state.data.projects) {
+    state.data.projects = [];
+  }
+  state.data.projects.push(project);
+  persistData();
+  return project;
+}
+
+function updateProject(projectId, updates) {
+  if (!state.data.projects) return null;
+  const idx = state.data.projects.findIndex(p => p.id === projectId);
+  if (idx === -1) return null;
+
+  state.data.projects[idx] = {
+    ...state.data.projects[idx],
+    ...updates,
+    updatedAt: Date.now(),
+  };
+  persistData();
+  return state.data.projects[idx];
+}
+
+function deleteProject(projectId) {
+  if (!state.data.projects) return false;
+  const idx = state.data.projects.findIndex(p => p.id === projectId);
+  if (idx === -1) return false;
+
+  state.data.projects.splice(idx, 1);
+
+  const taskDates = Object.keys(state.data.tasks);
+  for (const dateKey of taskDates) {
+    const tasks = state.data.tasks[dateKey];
+    tasks.forEach(task => {
+      if (task.projectId === projectId) {
+        task.projectId = null;
+      }
+    });
+  }
+
+  if (state.selectedProjectId === projectId) {
+    state.selectedProjectId = 'all';
+  }
+
+  persistData();
+  return true;
+}
+
+function getProjectById(projectId) {
+  if (!state.data.projects) return null;
+  return state.data.projects.find(p => p.id === projectId) || null;
+}
+
+function getAllProjects() {
+  return state.data.projects || [];
+}
+
+function getTasksForProject(projectId, dateKey) {
+  let tasks = [];
+
+  if (dateKey === 'all') {
+    const dates = Object.keys(state.data.tasks);
+    for (const d of dates) {
+      tasks = tasks.concat(state.data.tasks[d] || []);
+    }
+  } else if (dateKey === 'none') {
+    return [];
+  } else {
+    tasks = state.data.tasks[dateKey] || [];
+  }
+
+  if (projectId === 'all') {
+    return tasks;
+  } else if (projectId === 'none') {
+    return tasks.filter(t => !t.projectId);
+  } else {
+    return tasks.filter(t => t.projectId === projectId);
+  }
+}
+
+function getAllTasksForProject(projectId) {
+  const dates = Object.keys(state.data.tasks);
+  let allTasks = [];
+
+  for (const dateKey of dates) {
+    const tasks = state.data.tasks[dateKey] || [];
+    if (projectId === 'all') {
+      allTasks = allTasks.concat(tasks);
+    } else if (projectId === 'none') {
+      allTasks = allTasks.concat(tasks.filter(t => !t.projectId));
+    } else {
+      allTasks = allTasks.concat(tasks.filter(t => t.projectId === projectId));
+    }
+  }
+
+  return allTasks;
+}
+
+function getProjectStats(projectId) {
+  const tasks = getAllTasksForProject(projectId);
+
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const inProgressTasks = tasks.filter(t => t.status === 'inProgress').length;
+  const todoTasks = tasks.filter(t => t.status === 'todo').length;
+
+  const totalEstimated = tasks.reduce((sum, t) => sum + t.estimatedPomodoros, 0);
+  const totalCompleted = tasks.reduce((sum, t) => sum + (t.completedPomodoros || 0), 0);
+
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const pomodoroProgress = totalEstimated > 0 ? Math.min(Math.round((totalCompleted / totalEstimated) * 100), 100) : 0;
+
+  return {
+    totalTasks,
+    completedTasks,
+    inProgressTasks,
+    todoTasks,
+    totalEstimatedPomodoros: totalEstimated,
+    totalCompletedPomodoros: totalCompleted,
+    completionRate,
+    pomodoroProgress,
+    remainingTasks: todoTasks + inProgressTasks,
+  };
+}
+
+function getProjectBurndownData(projectId) {
+  const today = new Date();
+  const dates = [];
+  const remainingEstimates = [];
+
+  const project = getProjectById(projectId);
+  const projectCreateDate = project ? new Date(project.createdAt) : new Date(today);
+  projectCreateDate.setHours(0, 0, 0, 0);
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const dateKey = getDateKey(d);
+    dates.push(`${d.getMonth() + 1}/${d.getDate()}`);
+
+    if (d < projectCreateDate) {
+      remainingEstimates.push(null);
+      continue;
+    }
+
+    const taskDates = Object.keys(state.data.tasks).filter(k => k <= dateKey);
+    let remaining = 0;
+
+    for (const td of taskDates) {
+      const tasks = state.data.tasks[td] || [];
+      for (const task of tasks) {
+        const matchProject = projectId === 'all' ? true :
+          (projectId === 'none' ? !task.projectId : task.projectId === projectId);
+        if (!matchProject) continue;
+
+        const createdDate = new Date(task.createdAt);
+        createdDate.setHours(0, 0, 0, 0);
+        if (createdDate > d) continue;
+
+        const completedDate = task.completedAt ? new Date(task.completedAt) : null;
+        if (completedDate) {
+          completedDate.setHours(0, 0, 0, 0);
+          if (completedDate <= d) continue;
+        }
+
+        const completedBefore = Math.min(task.completedPomodoros || 0, task.estimatedPomodoros);
+        remaining += Math.max(0, task.estimatedPomodoros - completedBefore);
+      }
+    }
+
+    remainingEstimates.push(remaining);
+  }
+
+  return { dates, remainingEstimates };
+}
+
+function getProjectTagDistribution(projectId) {
+  const tagMinutes = {};
+  const tagCount = {};
+
+  const dates = Object.keys(state.data.records);
+  for (const dateKey of dates) {
+    const records = state.data.records[dateKey] || [];
+    for (const record of records) {
+      const matchProject = projectId === 'all' ? true :
+        (projectId === 'none' ? !record.taskId : true);
+
+      if (projectId !== 'all' && projectId !== 'none' && record.taskId) {
+        const taskDates = Object.keys(state.data.tasks);
+        let task = null;
+        for (const td of taskDates) {
+          task = state.data.tasks[td].find(t => t.id === record.taskId);
+          if (task) break;
+        }
+        if (!task || task.projectId !== projectId) continue;
+      }
+
+      if (projectId === 'none' && record.taskId) {
+        const taskDates = Object.keys(state.data.tasks);
+        let task = null;
+        for (const td of taskDates) {
+          task = state.data.tasks[td].find(t => t.id === record.taskId);
+          if (task) break;
+        }
+        if (task && task.projectId) continue;
+      }
+
+      const tags = extractTags(record.content);
+      if (tags.length === 0) continue;
+
+      const minutesPerTag = record.durationMinutes / tags.length;
+      tags.forEach(tag => {
+        if (!tagMinutes[tag]) {
+          tagMinutes[tag] = 0;
+          tagCount[tag] = 0;
+        }
+        tagMinutes[tag] += minutesPerTag;
+        tagCount[tag]++;
+      });
+    }
+  }
+
+  const sortedTags = Object.entries(tagMinutes)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([tag, minutes]) => ({ tag, minutes, count: tagCount[tag] }));
+
+  return sortedTags;
+}
+
+function getProjectRecentPomodoros(projectId, limit = 5) {
+  const allRecords = [];
+
+  const dates = Object.keys(state.data.records).sort().reverse();
+  for (const dateKey of dates) {
+    const records = state.data.records[dateKey] || [];
+    for (const record of records) {
+      const matchProject = projectId === 'all' ? true :
+        (projectId === 'none' ? !record.taskId : true);
+
+      if (projectId !== 'all' && projectId !== 'none' && record.taskId) {
+        const taskDates = Object.keys(state.data.tasks);
+        let task = null;
+        for (const td of taskDates) {
+          task = state.data.tasks[td].find(t => t.id === record.taskId);
+          if (task) break;
+        }
+        if (!task || task.projectId !== projectId) continue;
+      }
+
+      if (projectId === 'none' && record.taskId) {
+        const taskDates = Object.keys(state.data.tasks);
+        let task = null;
+        for (const td of taskDates) {
+          task = state.data.tasks[td].find(t => t.id === record.taskId);
+          if (task) break;
+        }
+        if (task && task.projectId) continue;
+      }
+
+      allRecords.push(record);
+      if (allRecords.length >= limit) return allRecords;
+    }
+  }
+
+  return allRecords;
+}
+
+function predictProjectCompletion(projectId) {
+  const project = getProjectById(projectId);
+  if (!project) {
+    return { status: 'on-track', daysLeft: 0, predictedDays: 0, message: '项目不存在' };
+  }
+
+  const stats = getProjectStats(projectId);
+  const now = Date.now();
+
+  let daysSinceStart = 1;
+  if (project.createdAt) {
+    daysSinceStart = Math.max(1, Math.floor((now - project.createdAt) / (1000 * 60 * 60 * 24)));
+  }
+
+  const pomodorosPerDay = daysSinceStart > 0 ? stats.totalCompletedPomodoros / daysSinceStart : 0;
+
+  const remainingPomodoros = Math.max(0, stats.totalEstimatedPomodoros - stats.totalCompletedPomodoros);
+
+  let predictedDays = Infinity;
+  if (pomodorosPerDay > 0) {
+    predictedDays = Math.ceil(remainingPomodoros / pomodorosPerDay);
+  }
+
+  let daysLeft = null;
+  if (project.targetDate) {
+    const targetDate = new Date(project.targetDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+    daysLeft = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+  }
+
+  let status = 'on-track';
+  let message = '进度正常';
+
+  if (daysLeft !== null) {
+    if (predictedDays === Infinity) {
+      status = 'warning';
+      message = '还没有开始记录番茄钟，无法预测';
+    } else if (predictedDays <= daysLeft) {
+      status = 'on-track';
+      message = `按当前速度可提前${daysLeft - predictedDays}天完成`;
+    } else if (predictedDays <= daysLeft + 3) {
+      status = 'warning';
+      message = `按当前速度预计延期${predictedDays - daysLeft}天，需要加快进度`;
+    } else {
+      status = 'danger';
+      message = `按当前速度预计延期${predictedDays - daysLeft}天，严重落后`;
+    }
+  } else {
+    if (predictedDays === Infinity) {
+      message = '还没有开始记录番茄钟';
+    } else {
+      message = `预计还需要${predictedDays}天完成`;
+    }
+  }
+
+  return {
+    status,
+    daysLeft,
+    predictedDays,
+    message,
+  };
+}
+
+function filterRecordsByProject(records, projectId) {
+  if (projectId === 'all') return records;
+
+  return records.filter(record => {
+    if (projectId === 'none') {
+      if (!record.taskId) return true;
+      const taskDates = Object.keys(state.data.tasks);
+      for (const td of taskDates) {
+        const task = state.data.tasks[td].find(t => t.id === record.taskId);
+        if (task && !task.projectId) return true;
+      }
+      return false;
+    } else {
+      if (!record.taskId) return false;
+      const taskDates = Object.keys(state.data.tasks);
+      for (const td of taskDates) {
+        const task = state.data.tasks[td].find(t => t.id === record.taskId);
+        if (task && task.projectId === projectId) return true;
+      }
+      return false;
+    }
+  });
+}
+
+function getProjectTaskCount(projectId) {
+  const tasks = getAllTasksForProject(projectId);
+  return tasks.length;
+}
+
+function getFilteredTasks(dateKey) {
+  const tasks = getSortedTasks(dateKey);
+  if (state.selectedProjectId === 'all') {
+    return tasks;
+  } else if (state.selectedProjectId === 'none') {
+    return tasks.filter(t => !t.projectId);
+  } else {
+    return tasks.filter(t => t.projectId === state.selectedProjectId);
+  }
+}
+
+function renderProjectSelector() {
+  const projects = getAllProjects();
+
+  const allCount = getAllTasksForProject('all').length;
+  const noneCount = getAllTasksForProject('none').length;
+
+  el.allProjectCount.textContent = allCount;
+  el.noneProjectCount.textContent = noneCount;
+
+  el.projectList.innerHTML = '';
+
+  const allItem = document.createElement('div');
+  allItem.className = `project-selector-item ${state.selectedProjectId === 'all' ? 'active' : ''}`;
+  allItem.innerHTML = `
+    <div class="project-selector-color" style="background: #22c55e;"></div>
+    <span class="project-selector-name">全部任务</span>
+    <span class="project-selector-count">${allCount}</span>
+  `;
+  allItem.addEventListener('click', () => selectProject('all'));
+  el.projectList.appendChild(allItem);
+
+  const noneItem = document.createElement('div');
+  noneItem.className = `project-selector-item ${state.selectedProjectId === 'none' ? 'active' : ''}`;
+  noneItem.innerHTML = `
+    <div class="project-selector-color" style="background: #9ca3af;"></div>
+    <span class="project-selector-name">未分类</span>
+    <span class="project-selector-count">${noneCount}</span>
+  `;
+  noneItem.addEventListener('click', () => selectProject('none'));
+  el.projectList.appendChild(noneItem);
+
+  projects.forEach(project => {
+    const count = getProjectTaskCount(project.id);
+    const item = document.createElement('div');
+    item.className = `project-selector-item ${state.selectedProjectId === project.id ? 'active' : ''}`;
+    item.innerHTML = `
+      <div class="project-selector-color" style="background: ${project.color};"></div>
+      <span class="project-selector-name">${escapeHtml(project.name)}</span>
+      <span class="project-selector-count">${count}</span>
+    `;
+    item.addEventListener('click', () => selectProject(project.id));
+    el.projectList.appendChild(item);
+  });
+
+  el.projectListContainer.style.display = state.projectSelectorCollapsed ? 'none' : 'block';
+}
+
+function renderTaskProjectSelect() {
+  const projects = getAllProjects();
+  el.taskProjectSelect.innerHTML = '<option value="">不关联项目</option>';
+
+  projects.forEach(project => {
+    const option = document.createElement('option');
+    option.value = project.id;
+    option.textContent = project.name;
+    el.taskProjectSelect.appendChild(option);
+  });
+}
+
+function renderStatsProjectFilter() {
+  if (!el.statsProjectFilter) return;
+
+  const projects = getAllProjects();
+  el.statsProjectFilter.innerHTML = '<option value="">全部项目</option>';
+
+  const noneOption = document.createElement('option');
+  noneOption.value = 'none';
+  noneOption.textContent = '未分类';
+  el.statsProjectFilter.appendChild(noneOption);
+
+  projects.forEach(project => {
+    const option = document.createElement('option');
+    option.value = project.id;
+    option.textContent = project.name;
+    el.statsProjectFilter.appendChild(option);
+  });
+
+  if (state.statsProjectFilter) {
+    el.statsProjectFilter.value = state.statsProjectFilter;
+  }
+}
+
+function switchTasksViewMode(mode) {
+  state.tasksViewMode = mode;
+  el.viewToggleBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.viewMode === mode);
+  });
+  if (state.activeTab === 'tasks') {
+    if (mode === 'list') {
+      renderTasks();
+    } else {
+      renderTasksByProject();
+    }
+    renderTasksSummary();
+  }
+}
+
+function selectProject(projectId) {
+  state.selectedProjectId = projectId;
+  renderProjectSelector();
+  if (state.activeTab === 'tasks') {
+    if (state.tasksViewMode === 'list') {
+      renderTasks();
+    } else {
+      renderTasksByProject();
+    }
+    renderTasksSummary();
+  }
+}
+
+function toggleProjectSelector() {
+  state.projectSelectorCollapsed = !state.projectSelectorCollapsed;
+  el.projectListContainer.style.display = state.projectSelectorCollapsed ? 'none' : 'block';
+  el.projectCollapseBtn.textContent = state.projectSelectorCollapsed ? '▶' : '▼';
+}
+
+function toggleProjectCollapse(projectId) {
+  state.collapsedProjects[projectId] = !state.collapsedProjects[projectId];
+  if (state.tasksViewMode === 'project') {
+    renderTasksByProject();
+  }
+}
+
+function renderTasksByProject() {
+  el.dateTitle.textContent = formatDateDisplay(state.currentDate);
+  el.datePicker.value = state.currentDate;
+
+  const projects = getAllProjects();
+  el.tasksContainer.innerHTML = '';
+
+  const allTasks = getFilteredTasks(state.currentDate);
+
+  if (allTasks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tasks-empty-state';
+    empty.innerHTML = `
+      <div class="tasks-empty-icon">📋</div>
+      <div class="tasks-empty-text">今天还没有任务</div>
+      <div class="tasks-empty-hint">点击上方"新增任务"开始规划你的一天</div>
+    `;
+    el.tasksContainer.appendChild(empty);
+    return;
+  }
+
+  const projectGroups = {};
+  projectGroups['none'] = [];
+
+  projects.forEach(p => {
+    projectGroups[p.id] = [];
+  });
+
+  allTasks.forEach(task => {
+    const groupId = task.projectId || 'none';
+    if (!projectGroups[groupId]) {
+      projectGroups[groupId] = [];
+    }
+    projectGroups[groupId].push(task);
+  });
+
+  const sortedGroupIds = ['none', ...projects.map(p => p.id)];
+
+  sortedGroupIds.forEach(groupId => {
+    const tasks = projectGroups[groupId] || [];
+    if (tasks.length === 0) return;
+
+    const project = groupId === 'none' ? null : getProjectById(groupId);
+    const isCollapsed = state.collapsedProjects[groupId];
+
+    const group = document.createElement('div');
+    group.className = 'project-task-group';
+
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'project-task-group-header';
+    groupHeader.style.cursor = 'pointer';
+
+    const groupColor = project ? project.color : '#9ca3af';
+    const groupName = project ? escapeHtml(project.name) : '未分类';
+    const groupCount = tasks.length;
+    const completedCount = tasks.filter(t => t.status === 'completed').length;
+
+    groupHeader.innerHTML = `
+      <div class="project-task-group-collapse">${isCollapsed ? '▶' : '▼'}</div>
+      <div class="project-task-group-color" style="background: ${groupColor};"></div>
+      <div class="project-task-group-title">
+        <span class="project-task-group-name">${groupName}</span>
+        <span class="project-task-group-progress">${completedCount}/${groupCount}</span>
+      </div>
+    `;
+
+    groupHeader.addEventListener('click', () => toggleProjectCollapse(groupId));
+
+    const groupContent = document.createElement('div');
+    groupContent.className = 'project-task-group-content';
+    groupContent.style.display = isCollapsed ? 'none' : 'block';
+
+    tasks.forEach(task => {
+      const card = document.createElement('div');
+      card.className = `task-card status-${task.status}`;
+      card.draggable = true;
+      card.dataset.taskId = task.id;
+
+      const progressPct = Math.min((task.completedPomodoros / task.estimatedPomodoros) * 100, 100);
+      const isExceeded = task.completedPomodoros > task.estimatedPomodoros;
+
+      card.innerHTML = `
+        <div class="task-status-toggle status-${task.status}" title="切换状态：${getStatusLabel(task.status)}"></div>
+        <div class="task-content">
+          <div class="task-header">
+            <span class="task-name">${escapeHtml(task.name)}</span>
+            <span class="task-priority priority-${task.priority}">${getPriorityLabel(task.priority)}</span>
+            ${task.isCarriedOver ? '<span class="task-carried-badge">顺延</span>' : ''}
+          </div>
+          <div class="task-progress-section">
+            <div class="task-progress-info">
+              <span class="task-progress-text">${task.completedPomodoros} / ${task.estimatedPomodoros} 番茄</span>
+              <span class="task-progress-percentage" style="color: ${isExceeded ? '#f59e0b' : '#22c55e'}">${Math.round(progressPct)}%</span>
+            </div>
+            <div class="task-progress-bar">
+              <div class="task-progress-fill ${isExceeded ? 'exceeded' : ''}" style="width: ${progressPct}%"></div>
+            </div>
+          </div>
+          <div class="task-meta">
+            <div class="task-pomodoro-info">
+              <span class="task-pomodoro-icon">🍅</span>
+              <span>实际完成: ${task.completedPomodoros} 个</span>
+            </div>
+            <span>状态: ${getStatusLabel(task.status)}</span>
+          </div>
+        </div>
+        <div class="task-drag-handle" title="拖拽排序">
+          <span class="task-drag-dot"></span>
+          <span class="task-drag-dot"></span>
+          <span class="task-drag-dot"></span>
+        </div>
+        <div class="task-actions">
+          <button class="task-action-btn" data-action="edit" title="编辑" draggable="false">✎</button>
+          <button class="task-action-btn delete" data-action="delete" title="删除" draggable="false">✕</button>
+        </div>
+      `;
+
+      const statusToggle = card.querySelector('.task-status-toggle');
+      statusToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleTaskStatus(task.id);
+        renderAll();
+      });
+      statusToggle.setAttribute('draggable', 'false');
+
+      const editBtn = card.querySelector('[data-action="edit"]');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditTaskModal(task.id);
+      });
+
+      const deleteBtn = card.querySelector('[data-action="delete"]');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`确定要删除任务"${task.name}"吗？`)) {
+          deleteTask(task.id);
+          if (state.currentTaskId === task.id) {
+            state.currentTaskId = null;
+          }
+          renderAll();
+        }
+      });
+
+      const noDragElements = card.querySelectorAll('.task-status-toggle, .task-actions, .task-action-btn');
+      noDragElements.forEach(el => {
+        el.setAttribute('draggable', 'false');
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('dragstart', (e) => e.preventDefault());
+      });
+
+      groupContent.appendChild(card);
+    });
+
+    group.appendChild(groupHeader);
+    group.appendChild(groupContent);
+    el.tasksContainer.appendChild(group);
+  });
+}
+
+function openProjectModal() {
+  state.editingProjectId = null;
+  state.tempProjectColor = '#22c55e';
+  el.projectFormTitle.textContent = '新增项目';
+  el.projectNameInput.value = '';
+  el.projectDescInput.value = '';
+  el.projectTargetDate.value = '';
+  renderProjectManagementList();
+  el.projectModal.style.display = 'flex';
+  setTimeout(() => el.projectNameInput.focus(), 100);
+}
+
+function closeProjectModal() {
+  state.editingProjectId = null;
+  el.projectModal.style.display = 'none';
+}
+
+function openEditProjectModal(projectId) {
+  const project = getProjectById(projectId);
+  if (!project) return;
+
+  state.editingProjectId = projectId;
+  state.tempProjectColor = project.color;
+  el.projectFormTitle.textContent = '编辑项目';
+  el.projectNameInput.value = project.name;
+  el.projectDescInput.value = project.description || '';
+  el.projectTargetDate.value = project.targetDate || '';
+  el.projectModal.style.display = 'flex';
+  setTimeout(() => {
+    el.projectNameInput.focus();
+    el.projectNameInput.select();
+  }, 100);
+}
+
+function saveProjectHandler() {
+  const name = el.projectNameInput.value.trim();
+  if (!name) {
+    el.projectNameInput.focus();
+    return;
+  }
+
+  const description = el.projectDescInput.value.trim();
+  const targetDate = el.projectTargetDate.value || null;
+  const color = state.tempProjectColor;
+
+  if (state.editingProjectId) {
+    updateProject(state.editingProjectId, { name, description, color, targetDate });
+  } else {
+    addProject(name, description, color, targetDate);
+  }
+
+  closeProjectModal();
+  renderAll();
+}
+
+function renderProjectManagementList() {
+  const projects = getAllProjects();
+  el.projectManagementList.innerHTML = '';
+
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'project-list-empty';
+    empty.innerHTML = '<div>还没有创建项目</div><div style="font-size:12px;color:#999;">在左侧表单中创建第一个项目</div>';
+    el.projectManagementList.appendChild(empty);
+    return;
+  }
+
+  projects.forEach(project => {
+    const stats = getProjectStats(project.id);
+    const item = document.createElement('div');
+    item.className = 'project-management-item';
+    item.innerHTML = `
+      <div class="project-management-header">
+        <div class="project-management-color" style="background: ${project.color};"></div>
+        <div class="project-management-info">
+          <div class="project-management-name">${escapeHtml(project.name)}</div>
+          ${project.description ? `<div class="project-management-desc">${escapeHtml(project.description)}</div>` : ''}
+        </div>
+        <div class="project-management-actions">
+          <button class="project-action-btn" data-action="edit" title="编辑">✎</button>
+          <button class="project-action-btn delete" data-action="delete" title="删除">✕</button>
+        </div>
+      </div>
+      <div class="project-management-stats">
+        <div class="project-management-stat">
+          <span>任务</span>
+          <strong>${stats.completedTasks}/${stats.totalTasks}</strong>
+        </div>
+        <div class="project-management-stat">
+          <span>番茄</span>
+          <strong>${stats.totalCompletedPomodoros}/${stats.totalEstimatedPomodoros}</strong>
+        </div>
+        <div class="project-management-stat">
+          <span>进度</span>
+          <strong>${stats.pomodoroProgress}%</strong>
+        </div>
+      </div>
+      <div class="project-management-progress">
+        <div class="project-management-progress-bar">
+          <div class="project-management-progress-fill" style="width: ${stats.pomodoroProgress}%; background: ${project.color};"></div>
+        </div>
+      </div>
+    `;
+
+    const editBtn = item.querySelector('[data-action="edit"]');
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditProjectModal(project.id);
+    });
+
+    const deleteBtn = item.querySelector('[data-action="delete"]');
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`确定要删除项目"${project.name}"吗？该项目下的任务将变为未分类。`)) {
+        deleteProject(project.id);
+        renderProjectManagementList();
+        renderAll();
+      }
+    });
+
+    el.projectManagementList.appendChild(item);
+  });
+}
+
+function openProjectDashboardModal() {
+  el.projectDashboardModal.style.display = 'flex';
+  setTimeout(() => {
+    renderProjectOverview();
+    renderProjectDetailCards();
+  }, 50);
+}
+
+function closeProjectDashboardModal() {
+  el.projectDashboardModal.style.display = 'none';
+}
+
+function switchDashboardTab(tab) {
+  state.dashboardTab = tab;
+  el.dashboardTabBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  el.dashboardOverviewTab.style.display = tab === 'overview' ? 'block' : 'none';
+  el.dashboardDetailTab.style.display = tab === 'detail' ? 'block' : 'none';
+  if (tab === 'overview') {
+    renderProjectOverview();
+  } else {
+    renderProjectDetailCards();
+  }
+}
+
+function switchDashboardModalTab(tab) {
+  state.dashboardModalTab = tab;
+  el.dashboardModalTabBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  el.dashboardModalOverviewTab.style.display = tab === 'overview' ? 'block' : 'none';
+  el.dashboardModalDetailTab.style.display = tab === 'detail' ? 'block' : 'none';
+  if (tab === 'overview') {
+    renderProjectOverview();
+  } else {
+    renderProjectDetailCards();
+  }
+}
+
+function renderProjectOverview() {
+  const projects = getAllProjects();
+  const container = state.activeTab === 'projectDashboard' ? el.projectProgressBars : el.projectProgressBars;
+
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dashboard-empty';
+    empty.innerHTML = '<div>还没有项目</div><div style="font-size:12px;color:#999;">创建项目后可以在这里查看进度对比</div>';
+    container.appendChild(empty);
+    return;
+  }
+
+  const chartData = projects.map(project => {
+    const stats = getProjectStats(project.id);
+    return {
+      project,
+      stats,
+      prediction: predictProjectCompletion(project.id),
+    };
+  });
+
+  chartData.sort((a, b) => b.stats.pomodoroProgress - a.stats.pomodoroProgress);
+
+  const maxProgress = 100;
+
+  chartData.forEach(({ project, stats, prediction }) => {
+    const bar = document.createElement('div');
+    bar.className = 'project-overview-bar';
+
+    const statusColors = {
+      'on-track': '#22c55e',
+      'warning': '#f59e0b',
+      'danger': '#ef4444',
+    };
+
+    bar.innerHTML = `
+      <div class="project-overview-header">
+        <div class="project-overview-name">
+          <div class="project-overview-color" style="background: ${project.color};"></div>
+          <span>${escapeHtml(project.name)}</span>
+        </div>
+        <div class="project-overview-progress-text">${stats.pomodoroProgress}%</div>
+      </div>
+      <div class="project-overview-bar-container">
+        <div class="project-overview-bar-bg">
+          <div class="project-overview-bar-fill" style="width: ${stats.pomodoroProgress}%; background: ${project.color};"></div>
+        </div>
+        <div class="project-overview-milestones">
+          <div class="project-overview-milestone" style="left: 25%;"></div>
+          <div class="project-overview-milestone" style="left: 50%;"></div>
+          <div class="project-overview-milestone" style="left: 75%;"></div>
+        </div>
+      </div>
+      <div class="project-overview-footer">
+        <div class="project-overview-stat">
+          <span>🍅 ${stats.totalCompletedPomodoros}/${stats.totalEstimatedPomodoros}</span>
+        </div>
+        <div class="project-overview-stat">
+          <span>📋 ${stats.completedTasks}/${stats.totalTasks}</span>
+        </div>
+        <div class="project-overview-status" style="color: ${statusColors[prediction.status]};">
+          ${prediction.message}
+        </div>
+      </div>
+    `;
+
+    container.appendChild(bar);
+  });
+}
+
+function renderProjectDetailCards() {
+  const projects = getAllProjects();
+  const container = state.activeTab === 'projectDashboard' ? el.projectDetailCards : el.projectDetailCards;
+
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dashboard-empty';
+    empty.innerHTML = '<div>还没有项目</div><div style="font-size:12px;color:#999;">创建项目后可以在这里查看详情</div>';
+    container.appendChild(empty);
+    return;
+  }
+
+  projects.forEach(project => {
+    const card = renderProjectDetailCard(project.id);
+    container.appendChild(card);
+  });
+}
+
+function renderProjectDetailCard(projectId) {
+  const project = getProjectById(projectId);
+  if (!project) return document.createElement('div');
+
+  const stats = getProjectStats(projectId);
+  const prediction = predictProjectCompletion(projectId);
+  const tagDist = getProjectTagDistribution(projectId);
+  const recentPomodoros = getProjectRecentPomodoros(projectId, 5);
+  const burndownData = getProjectBurndownData(projectId);
+
+  const card = document.createElement('div');
+  card.className = 'project-detail-card';
+
+  const statusColors = {
+    'on-track': '#22c55e',
+    'warning': '#f59e0b',
+    'danger': '#ef4444',
+  };
+
+  const statusBgColors = {
+    'on-track': 'rgba(34, 197, 94, 0.1)',
+    'warning': 'rgba(245, 158, 11, 0.1)',
+    'danger': 'rgba(239, 68, 68, 0.1)',
+  };
+
+  card.innerHTML = `
+    <div class="project-detail-header">
+      <div class="project-detail-title">
+        <div class="project-detail-color" style="background: ${project.color};"></div>
+        <h3>${escapeHtml(project.name)}</h3>
+        <span class="project-detail-status" style="color: ${statusColors[prediction.status]}; background: ${statusBgColors[prediction.status]};">
+          ${prediction.status === 'on-track' ? '正常' : prediction.status === 'warning' ? '预警' : '延期'}
+        </span>
+      </div>
+      ${project.description ? `<p class="project-detail-desc">${escapeHtml(project.description)}</p>` : ''}
+    </div>
+
+    <div class="project-detail-stats">
+      <div class="project-detail-stat">
+        <div class="project-detail-stat-value">${stats.pomodoroProgress}%</div>
+        <div class="project-detail-stat-label">完成进度</div>
+      </div>
+      <div class="project-detail-stat">
+        <div class="project-detail-stat-value">${stats.completedTasks}/${stats.totalTasks}</div>
+        <div class="project-detail-stat-label">任务完成</div>
+      </div>
+      <div class="project-detail-stat">
+        <div class="project-detail-stat-value">${stats.totalCompletedPomodoros}/${stats.totalEstimatedPomodoros}</div>
+        <div class="project-detail-stat-label">番茄完成</div>
+      </div>
+      <div class="project-detail-stat">
+        <div class="project-detail-stat-value">${prediction.daysLeft !== null ? prediction.daysLeft + '天' : '未设置'}</div>
+        <div class="project-detail-stat-label">剩余时间</div>
+      </div>
+    </div>
+
+    <div class="project-detail-warning" style="border-left: 3px solid ${statusColors[prediction.status]}; background: ${statusBgColors[prediction.status]};">
+      <span style="color: ${statusColors[prediction.status]};">⚠️</span>
+      <span>${prediction.message}</span>
+    </div>
+
+    <div class="project-detail-section">
+      <h4>🔥 燃尽图</h4>
+      <canvas class="project-burndown-chart" id="burndown_${projectId}" width="300" height="120"></canvas>
+    </div>
+
+    <div class="project-detail-section">
+      <h4>🏷️ 标签分布</h4>
+      <div class="project-tag-distribution">
+        ${tagDist.length > 0 ? tagDist.map(tag => `
+          <div class="project-tag-item">
+            <span class="project-tag-name">#${tag.tag}</span>
+            <span class="project-tag-minutes">${tag.minutes}分钟</span>
+            <div class="project-tag-bar">
+              <div class="project-tag-bar-fill" style="width: ${Math.min(100, tag.minutes / Math.max(...tagDist.map(t => t.minutes)) * 100)}%;"></div>
+            </div>
+          </div>
+        `).join('') : '<div class="project-tag-empty">暂无标签数据</div>'}
+      </div>
+    </div>
+
+    <div class="project-detail-section">
+      <h4>🍅 最近番茄记录</h4>
+      <div class="project-pomodoro-list">
+        ${recentPomodoros.length > 0 ? recentPomodoros.map(record => `
+          <div class="project-pomodoro-item">
+            <div class="project-pomodoro-time">${formatTimeRange(record.startTime, record.durationMinutes)}</div>
+            <div class="project-pomodoro-content">${escapeHtml(record.content || '（未填写）')}</div>
+          </div>
+        `).join('') : '<div class="project-pomodoro-empty">暂无番茄记录</div>'}
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    const canvas = document.getElementById(`burndown_${projectId}`);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      const data = burndownData.remainingEstimates.filter(v => v !== null);
+      const dates = burndownData.dates.slice(-data.length);
+
+      if (data.length > 0) {
+        const maxVal = Math.max(...data, 1);
+        const padding = { top: 10, right: 10, bottom: 20, left: 30 };
+        const chartWidth = canvas.width - padding.left - padding.right;
+        const chartHeight = canvas.height - padding.top - padding.bottom;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = padding.top + (chartHeight / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(canvas.width - padding.right, y);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = project.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        data.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
+          const y = padding.top + chartHeight - (val / maxVal) * chartHeight;
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = project.color;
+        data.forEach((val, i) => {
+          const x = padding.left + (chartWidth / (data.length - 1 || 1)) * i;
+          const y = padding.top + chartHeight - (val / maxVal) * chartHeight;
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.fillStyle = '#999';
+        ctx.font = '10px DM Mono';
+        ctx.textAlign = 'center';
+        if (dates.length > 0) {
+          ctx.fillText(dates[0], padding.left, canvas.height - 5);
+          ctx.fillText(dates[dates.length - 1], canvas.width - padding.right, canvas.height - 5);
+        }
+
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(maxVal), padding.left - 5, padding.top + 5);
+        ctx.fillText('0', padding.left - 5, canvas.height - padding.bottom);
+      }
+    }
+  });
+
+  return card;
+}
+
+function renderProjectDashboard() {
+  el.dateTitle.textContent = '项目仪表盘';
+  el.datePicker.value = state.currentDate;
+
+  if (state.dashboardTab === 'overview') {
+    renderProjectOverview();
+  } else {
+    renderProjectDetailCards();
+  }
+}
+
+function setupProjectControls() {
+  el.manageProjectsBtn.addEventListener('click', openProjectModal);
+  el.projectDashboardBtn.addEventListener('click', openProjectDashboardModal);
+
+  el.closeProjectModal.addEventListener('click', closeProjectModal);
+  el.cancelProject.addEventListener('click', closeProjectModal);
+  el.saveProject.addEventListener('click', saveProjectHandler);
+
+  el.projectModal.addEventListener('click', (e) => {
+    if (e.target === el.projectModal) {
+      closeProjectModal();
+    }
+  });
+
+  el.projectNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      saveProjectHandler();
+    } else if (e.key === 'Escape') {
+      closeProjectModal();
+    }
+  });
+
+  el.closeProjectDashboardModal.addEventListener('click', closeProjectDashboardModal);
+  el.projectDashboardModal.addEventListener('click', (e) => {
+    if (e.target === el.projectDashboardModal) {
+      closeProjectDashboardModal();
+    }
+  });
+
+  el.dashboardTabBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchDashboardTab(btn.dataset.tab));
+  });
+
+  el.dashboardModalTabBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchDashboardModalTab(btn.dataset.tab));
+  });
+
+  el.projectCollapseBtn.addEventListener('click', toggleProjectSelector);
+
+  el.viewToggleBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchTasksViewMode(btn.dataset.viewMode);
+    });
+  });
+
+  if (el.statsProjectFilter) {
+    el.statsProjectFilter.addEventListener('change', (e) => {
+      state.statsProjectFilter = e.target.value;
+      renderAllStats();
+    });
+  }
+}
+
+function addTask(name, estimatedPomodoros, priority, projectId) {
   const today = getDateKey(new Date());
   const currentTasks = getTasksForDate(today);
   const maxOrder = currentTasks.length > 0
@@ -425,6 +1625,7 @@ function addTask(name, estimatedPomodoros, priority) {
     name: name.trim(),
     estimatedPomodoros,
     priority,
+    projectId: projectId || null,
     status: 'todo',
     completedPomodoros: 0,
     createdAt: Date.now(),
@@ -448,7 +1649,7 @@ function updateTask(taskId, updates) {
     const tasks = state.data.tasks[dateKey];
     const idx = tasks.findIndex(t => t.id === taskId);
     if (idx !== -1) {
-      tasks[idx] = { ...tasks[idx], ...updates };
+      tasks[idx] = { ...tasks[idx], ...updates, updatedAt: Date.now() };
       persistData();
       return tasks[idx];
     }
@@ -510,7 +1711,15 @@ function getStatusLabel(status) {
 
 function renderTaskSelector() {
   const today = getDateKey(new Date());
-  const tasks = getSortedTasks(today).filter(t => t.status !== 'completed');
+  let tasks = getSortedTasks(today).filter(t => t.status !== 'completed');
+
+  if (state.selectedProjectId !== 'all') {
+    if (state.selectedProjectId === 'none') {
+      tasks = tasks.filter(t => !t.projectId);
+    } else {
+      tasks = tasks.filter(t => t.projectId === state.selectedProjectId);
+    }
+  }
 
   el.taskSelect.innerHTML = '<option value="">不关联任务</option>';
   tasks.forEach(task => {
@@ -529,7 +1738,7 @@ function renderTaskSelector() {
 }
 
 function renderTasksSummary() {
-  const tasks = getTasksForDate(state.currentDate);
+  const tasks = getFilteredTasks(state.currentDate);
   const total = tasks.length;
   const completed = tasks.filter(t => t.status === 'completed').length;
   const estimatedTotal = tasks.reduce((sum, t) => sum + t.estimatedPomodoros, 0);
@@ -551,7 +1760,12 @@ function renderTasks() {
   el.dateTitle.textContent = formatDateDisplay(state.currentDate);
   el.datePicker.value = state.currentDate;
 
-  const tasks = getSortedTasks(state.currentDate);
+  if (state.tasksViewMode === 'project') {
+    renderTasksByProject();
+    return;
+  }
+
+  const tasks = getFilteredTasks(state.currentDate);
   el.tasksContainer.innerHTML = '';
 
   if (tasks.length === 0) {
@@ -660,6 +1874,8 @@ function openAddTaskModal() {
   el.taskModalTitle.textContent = '新增任务';
   el.taskNameInput.value = '';
   el.taskPrioritySelect.value = '2';
+  renderTaskProjectSelect();
+  el.taskProjectSelect.value = state.selectedProjectId !== 'all' && state.selectedProjectId !== 'none' ? state.selectedProjectId : '';
   el.pomodoroCountDisplay.textContent = '1';
   el.pomodoroMinus.disabled = true;
   el.taskModal.style.display = 'flex';
@@ -680,6 +1896,8 @@ function openEditTaskModal(taskId) {
   el.taskModalTitle.textContent = '编辑任务';
   el.taskNameInput.value = task.name;
   el.taskPrioritySelect.value = String(task.priority);
+  renderTaskProjectSelect();
+  el.taskProjectSelect.value = task.projectId || '';
   el.pomodoroCountDisplay.textContent = String(task.estimatedPomodoros);
   el.pomodoroMinus.disabled = task.estimatedPomodoros <= 1;
   el.taskModal.style.display = 'flex';
@@ -703,11 +1921,12 @@ function saveTaskHandler() {
 
   const estimatedPomodoros = state.tempTaskPomodoroCount;
   const priority = parseInt(el.taskPrioritySelect.value, 10);
+  const projectId = el.taskProjectSelect.value || null;
 
   if (state.editingTaskId) {
-    updateTask(state.editingTaskId, { name, estimatedPomodoros, priority });
+    updateTask(state.editingTaskId, { name, estimatedPomodoros, priority, projectId });
   } else {
-    addTask(name, estimatedPomodoros, priority);
+    addTask(name, estimatedPomodoros, priority, projectId);
   }
 
   closeTaskModal();
@@ -731,6 +1950,7 @@ function switchTab(tab) {
   el.tasksTab.style.display = tab === 'tasks' ? 'flex' : 'none';
   el.recordsTab.style.display = tab === 'records' ? 'flex' : 'none';
   el.calendarTab.style.display = tab === 'calendar' ? 'flex' : 'none';
+  el.projectDashboardTab.style.display = tab === 'projectDashboard' ? 'flex' : 'none';
   if (tab === 'tasks') {
     renderTasks();
     renderTasksSummary();
@@ -738,6 +1958,8 @@ function switchTab(tab) {
     renderRecords();
   } else if (tab === 'calendar') {
     renderCalendar();
+  } else if (tab === 'projectDashboard') {
+    renderProjectDashboard();
   }
 }
 
@@ -823,6 +2045,9 @@ function handleDrop(e) {
 function renderAll() {
   renderTaskSelector();
   renderCustomPresets();
+  renderProjectSelector();
+  renderTaskProjectSelect();
+  renderStatsProjectFilter();
   if (state.activeTab === 'tasks') {
     renderTasks();
     renderTasksSummary();
@@ -830,6 +2055,8 @@ function renderAll() {
     renderRecords();
   } else if (state.activeTab === 'calendar') {
     renderCalendar();
+  } else if (state.activeTab === 'projectDashboard') {
+    renderProjectDashboard();
   }
   renderTomatoes();
   renderStats();
@@ -1000,8 +2227,14 @@ function getWeekDates() {
   return dates;
 }
 
-function calculateMinutesForDate(dateKey) {
-  const records = state.data.records[dateKey] || [];
+function calculateMinutesForDate(dateKey, projectId) {
+  let records = state.data.records[dateKey] || [];
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
+  
+  if (filterProjectId) {
+    records = filterRecordsByProject(records, filterProjectId);
+  }
+  
   return records.reduce((sum, r) => sum + r.durationMinutes, 0);
 }
 
@@ -1058,8 +2291,19 @@ function extractTags(content) {
   return tags;
 }
 
-function getStreakData() {
-  const dateKeys = Object.keys(state.data.records).sort();
+function getStreakData(projectId) {
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
+  
+  let dateKeys = Object.keys(state.data.records).sort();
+  
+  if (filterProjectId) {
+    dateKeys = dateKeys.filter(dateKey => {
+      const records = state.data.records[dateKey] || [];
+      const filtered = filterRecordsByProject(records, filterProjectId);
+      return filtered.length > 0;
+    });
+  }
+  
   if (dateKeys.length === 0) {
     return { current: 0, longest: 0 };
   }
@@ -1113,12 +2357,18 @@ function getStreakData() {
   return { current: currentStreak, longest: longestStreak };
 }
 
-function getTotalStats() {
+function getTotalStats(projectId) {
   let totalMin = 0;
   let totalCount = 0;
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
 
   Object.values(state.data.records).forEach((records) => {
-    records.forEach((r) => {
+    let filteredRecords = records;
+    if (filterProjectId) {
+      filteredRecords = filterRecordsByProject(records, filterProjectId);
+    }
+    
+    filteredRecords.forEach((r) => {
       totalMin += r.durationMinutes;
       totalCount++;
     });
@@ -1127,7 +2377,8 @@ function getTotalStats() {
   return { totalMin, totalCount };
 }
 
-function getYearData() {
+function getYearData(projectId) {
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
   const today = new Date();
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 364);
@@ -1137,7 +2388,7 @@ function getYearData() {
   const current = new Date(startDate);
   while (current <= today) {
     const key = getDateKey(current);
-    const minutes = calculateMinutesForDate(key);
+    const minutes = calculateMinutesForDate(key, filterProjectId);
     days.push({
       date: new Date(current),
       dateKey: key,
@@ -1208,7 +2459,8 @@ function renderHeatmap() {
   });
 }
 
-function getTrendData30Days() {
+function getTrendData30Days(projectId) {
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
   const today = new Date();
   const labels = [];
   const data = [];
@@ -1217,7 +2469,7 @@ function getTrendData30Days() {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const key = getDateKey(d);
-    const minutes = calculateMinutesForDate(key);
+    const minutes = calculateMinutesForDate(key, filterProjectId);
     labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
     data.push(minutes);
   }
@@ -1225,7 +2477,8 @@ function getTrendData30Days() {
   return { labels, data };
 }
 
-function getTrendData12Weeks() {
+function getTrendData12Weeks(projectId) {
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
   const labels = [];
   const data = [];
 
@@ -1240,7 +2493,7 @@ function getTrendData12Weeks() {
       const d = new Date(weekStart);
       d.setDate(d.getDate() + j);
       const key = getDateKey(d);
-      weekMinutes += calculateMinutesForDate(key);
+      weekMinutes += calculateMinutesForDate(key, filterProjectId);
     }
 
     labels.push(`第${12 - i}周`);
@@ -1331,11 +2584,17 @@ function renderTrendChart() {
   });
 }
 
-function getHourDistribution() {
+function getHourDistribution(projectId) {
   const hours = new Array(24).fill(0);
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
 
   Object.values(state.data.records).forEach((records) => {
-    records.forEach((r) => {
+    let filteredRecords = records;
+    if (filterProjectId) {
+      filteredRecords = filterRecordsByProject(records, filterProjectId);
+    }
+    
+    filteredRecords.forEach((r) => {
       const startDate = new Date(r.startTime);
       const startHour = startDate.getHours();
       const totalMinutes = r.durationMinutes;
@@ -1440,12 +2699,18 @@ function renderHourChart() {
   });
 }
 
-function getTagDistribution() {
+function getTagDistribution(projectId) {
   const tagMinutes = {};
   const tagCount = {};
+  const filterProjectId = projectId !== undefined ? projectId : state.statsProjectFilter;
 
   Object.values(state.data.records).forEach((records) => {
-    records.forEach((r) => {
+    let filteredRecords = records;
+    if (filterProjectId) {
+      filteredRecords = filterRecordsByProject(records, filterProjectId);
+    }
+    
+    filteredRecords.forEach((r) => {
       const tags = extractTags(r.content);
       if (tags.length === 0) return;
 
@@ -1562,6 +2827,7 @@ function renderOverviewStats() {
 }
 
 function renderAllStats() {
+  renderStatsProjectFilter();
   renderOverviewStats();
   renderHeatmap();
   renderTrendChart();
@@ -2685,9 +3951,10 @@ async function init() {
     if (!state.data.tasks) state.data.tasks = {};
     if (!state.data.lastActiveDate) state.data.lastActiveDate = null;
     if (!state.data.customPresets) state.data.customPresets = [];
+    if (!state.data.projects) state.data.projects = [];
   } catch (e) {
     console.error('加载数据失败:', e);
-    state.data = { records: {}, tasks: {}, lastActiveDate: null, customPresets: [] };
+    state.data = { records: {}, tasks: {}, lastActiveDate: null, customPresets: [], projects: [] };
   }
 
   try {
@@ -2709,6 +3976,7 @@ async function init() {
   setupShortcutInputs();
   setupStatsModal();
   setupCalendarControls();
+  setupProjectControls();
   updateTimerDisplay();
   renderAll();
   syncTimerState();

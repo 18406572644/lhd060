@@ -73,6 +73,37 @@
           <span class="today-label">今日番茄</span>
           <div class="tomatoes" id="tomatoes"></div>
         </div>
+
+        <div class="project-selector-section">
+          <div class="project-selector-header">
+            <h3 class="project-selector-title">项目选择器</h3>
+            <button class="project-collapse-btn" id="projectCollapseBtn" title="折叠/展开">▼</button>
+          </div>
+          <div class="project-list-container" id="projectListContainer">
+            <div class="project-list" id="projectList">
+              <div class="project-item active" data-project-id="all">
+                <span class="project-color-dot" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></span>
+                <span class="project-name">所有项目</span>
+                <span class="project-task-count" id="allProjectCount">0</span>
+              </div>
+              <div class="project-item" data-project-id="none">
+                <span class="project-color-dot" style="background: #9ca3af;"></span>
+                <span class="project-name">无项目</span>
+                <span class="project-task-count" id="noneProjectCount">0</span>
+              </div>
+            </div>
+            <div class="project-actions">
+              <button class="project-action-btn" id="manageProjectsBtn">
+                <span class="project-action-icon">⚙</span>
+                <span class="project-action-label">管理项目</span>
+              </button>
+              <button class="project-action-btn" id="projectDashboardBtn">
+                <span class="project-action-icon">📊</span>
+                <span class="project-action-label">项目仪表盘</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -85,6 +116,7 @@
             <button class="tab-btn active" data-tab="tasks">任务</button>
             <button class="tab-btn" data-tab="records">日记</button>
             <button class="tab-btn" data-tab="calendar">日历</button>
+            <button class="tab-btn" data-tab="projectDashboard">项目仪表盘</button>
           </div>
           <input type="date" id="datePicker" class="date-picker" />
         </div>
@@ -95,6 +127,16 @@
           <button class="add-task-btn" id="addTaskBtn">
             <span class="add-task-icon">+</span> 新增任务
           </button>
+          <div class="view-toggle">
+            <button class="view-toggle-btn active" data-view="list">
+              <span class="view-toggle-icon">☰</span>
+              <span class="view-toggle-label">列表视图</span>
+            </button>
+            <button class="view-toggle-btn" data-view="project">
+              <span class="view-toggle-icon">📁</span>
+              <span class="view-toggle-label">项目视图</span>
+            </button>
+          </div>
           <div class="tasks-summary" id="tasksSummary"></div>
         </div>
         <div class="tasks-container" id="tasksContainer"></div>
@@ -127,6 +169,24 @@
         <div class="calendar-body" id="calendarBody">
           <div class="cal-month-view" id="calMonthView"></div>
           <div class="cal-week-view" id="calWeekView" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="projectDashboardTab" style="display:none;">
+        <div class="project-dashboard-container">
+          <div class="dashboard-tab-switcher">
+            <button class="dashboard-tab-btn active" data-dashboard-tab="overview">项目总览</button>
+            <button class="dashboard-tab-btn" data-dashboard-tab="detail">项目详情</button>
+          </div>
+          <div class="dashboard-tab-content" id="dashboardOverviewTab">
+            <div class="dashboard-section">
+              <h4 class="dashboard-section-title">所有项目进度对比</h4>
+              <div class="project-progress-chart" id="projectProgressChart"></div>
+            </div>
+          </div>
+          <div class="dashboard-tab-content" id="dashboardDetailTab" style="display:none;">
+            <div class="project-cards-container" id="projectCardsContainer"></div>
+          </div>
         </div>
       </div>
     </main>
@@ -189,6 +249,12 @@
               <option value="3">高</option>
             </select>
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">所属项目</label>
+          <select id="taskProjectSelect" class="form-input">
+            <option value="">无项目</option>
+          </select>
         </div>
       </div>
       <div class="modal-actions">
@@ -299,6 +365,16 @@
         <button class="modal-close" id="closeStats">✕</button>
       </div>
 
+      <div class="stats-filter-row">
+        <div class="form-group">
+          <label class="form-label">按项目过滤</label>
+          <select id="statsProjectFilter" class="form-input">
+            <option value="">所有项目</option>
+            <option value="none">无项目</option>
+          </select>
+        </div>
+      </div>
+
       <!-- 概览卡片 -->
       <div class="stats-overview">
         <div class="overview-card">
@@ -377,6 +453,156 @@
           </div>
           <div class="tag-empty-hint" id="tagEmptyHint" style="display:none;">
             暂无标签数据。在记录内容中使用 <code>#标签名</code> 来添加标签。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 项目管理弹窗 -->
+  <div class="modal-overlay" id="projectModal" style="display:none;">
+    <div class="modal project-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">项目管理</h3>
+        <button class="modal-close" id="closeProjectModal">✕</button>
+      </div>
+
+      <div class="project-management-container">
+        <div class="project-list-section">
+          <h4 class="project-section-title">项目列表</h4>
+          <div class="project-management-list" id="projectManagementList"></div>
+        </div>
+
+        <div class="project-form-section">
+          <h4 class="project-section-title" id="projectFormTitle">新增项目</h4>
+          <div class="project-form">
+            <div class="form-group">
+              <label class="form-label">项目名称</label>
+              <input type="text" id="projectNameInput" class="form-input" placeholder="输入项目名称..." maxlength="50" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">项目描述</label>
+              <textarea id="projectDescInput" class="form-input form-textarea" placeholder="输入项目描述..." maxlength="200" rows="3"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">项目颜色</label>
+                <div class="color-picker">
+                  <div class="color-options">
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#ef4444" />
+                      <span class="color-dot" style="background: #ef4444;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#f97316" />
+                      <span class="color-dot" style="background: #f97316;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#eab308" />
+                      <span class="color-dot" style="background: #eab308;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#22c55e" checked />
+                      <span class="color-dot" style="background: #22c55e;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#06b6d4" />
+                      <span class="color-dot" style="background: #06b6d4;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#3b82f6" />
+                      <span class="color-dot" style="background: #3b82f6;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#8b5cf6" />
+                      <span class="color-dot" style="background: #8b5cf6;"></span>
+                    </label>
+                    <label class="color-option">
+                      <input type="radio" name="projectColor" value="#ec4899" />
+                      <span class="color-dot" style="background: #ec4899;"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">目标日期</label>
+                <input type="date" id="projectTargetDate" class="form-input" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="modal-btn cancel" id="cancelProject">取消</button>
+            <button class="modal-btn confirm" id="saveProject">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 项目仪表盘弹窗 -->
+  <div class="modal-overlay project-dashboard-overlay" id="projectDashboardModal" style="display:none;">
+    <div class="modal project-dashboard-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">📊 项目仪表盘</h3>
+        <button class="modal-close" id="closeProjectDashboardModal">✕</button>
+      </div>
+
+      <div class="dashboard-modal-tab-switcher">
+        <button class="dashboard-modal-tab-btn active" data-dashboard-modal-tab="overview">项目总览</button>
+        <button class="dashboard-modal-tab-btn" data-dashboard-modal-tab="detail">项目详情</button>
+      </div>
+
+      <div class="dashboard-modal-tab-content" id="dashboardModalOverviewTab">
+        <div class="dashboard-section">
+          <h4 class="dashboard-section-title">所有项目进度并排比较</h4>
+          <div class="project-progress-bars" id="projectProgressBars"></div>
+        </div>
+      </div>
+
+      <div class="dashboard-modal-tab-content" id="dashboardModalDetailTab" style="display:none;">
+        <div class="project-detail-cards" id="projectDetailCards">
+          <div class="project-detail-card" data-project-id="">
+            <div class="project-detail-header">
+              <div class="project-detail-title-row">
+                <span class="project-detail-color-dot" style="background: #22c55e;"></span>
+                <h5 class="project-detail-title">项目名称</h5>
+                <span class="project-detail-progress">0%</span>
+              </div>
+              <div class="project-detail-progress-bar">
+                <div class="project-detail-progress-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="project-detail-body">
+              <div class="project-detail-section">
+                <h6 class="project-detail-section-title">燃尽图</h6>
+                <div class="burndown-chart-container">
+                  <canvas class="burndown-chart"></canvas>
+                </div>
+              </div>
+              <div class="project-detail-row">
+                <div class="project-detail-section">
+                  <h6 class="project-detail-section-title">成员/标签分布</h6>
+                  <div class="tag-distribution-container">
+                    <canvas class="tag-distribution-chart"></canvas>
+                  </div>
+                </div>
+                <div class="project-detail-section">
+                  <h6 class="project-detail-section-title">番茄记录</h6>
+                  <div class="pomodoro-records-container">
+                    <canvas class="pomodoro-records-chart"></canvas>
+                  </div>
+                </div>
+              </div>
+              <div class="project-detail-section">
+                <h6 class="project-detail-section-title">预警</h6>
+                <div class="project-warnings" id="projectWarnings">
+                  <div class="warning-item warning-info">
+                    <span class="warning-icon">ℹ️</span>
+                    <span class="warning-text">暂无预警信息</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
