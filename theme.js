@@ -247,7 +247,57 @@ const ThemeSystem = (() => {
   function rgbToHex(r, g, b) {
     return '#' + [r, g, b].map(x => {
       const hex = Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0');
+      return hex;
     }).join('');
+  }
+
+  function getBrightness(hexOrRgb) {
+    let rgb;
+    if (typeof hexOrRgb === 'string') {
+      rgb = hexToRgb(hexOrRgb);
+      if (!rgb) {
+        const m = hexOrRgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!m) return 128;
+        rgb = { r: parseInt(m[1], 10), g: parseInt(m[2], 10), b: parseInt(m[3], 10) };
+      }
+    } else {
+      rgb = hexOrRgb;
+    }
+    return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+  }
+
+  function pickContrastText(bgHex) {
+    return getBrightness(bgHex) > 140 ? '#000000' : '#ffffff';
+  }
+
+  function darkenHex(hex, amount) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    return rgbToHex(
+      rgb.r * (1 - amount),
+      rgb.g * (1 - amount),
+      rgb.b * (1 - amount)
+    );
+  }
+
+  function lightenHex(hex, amount) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    return rgbToHex(
+      rgb.r + (255 - rgb.r) * amount,
+      rgb.g + (255 - rgb.g) * amount,
+      rgb.b + (255 - rgb.b) * amount
+    );
+  }
+
+  function rgbaFromHex(hex, alpha) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) {
+      const m = hex.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return `rgba(128, 128, 128, ${alpha})`;
+      return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})`;
+    }
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
   }
 
   function lerpColor(color1, color2, t) {
@@ -283,6 +333,47 @@ const ThemeSystem = (() => {
     root.style.setProperty('--color-border', vars.border);
     root.style.setProperty('--color-success', vars.success);
 
+    const btnPrimaryText = pickContrastText(vars.primary);
+    const btnPrimaryHover = getBrightness(vars.accent) > 140
+      ? darkenHex(vars.accent, 0.08)
+      : lightenHex(vars.accent, 0.12);
+    root.style.setProperty('--btn-primary-bg', vars.primary);
+    root.style.setProperty('--btn-primary-text', btnPrimaryText);
+    root.style.setProperty('--btn-primary-hover', btnPrimaryHover);
+
+    const contentBright = getBrightness(vars.contentBg);
+    const isContentLight = contentBright > 140;
+
+    const btnCancelBg = isContentLight
+      ? rgbaFromHex(vars.contentText, 0.03)
+      : rgbaFromHex(vars.contentText, 0.05);
+    const btnCancelHoverBg = isContentLight
+      ? rgbaFromHex(vars.contentText, 0.07)
+      : rgbaFromHex(vars.contentText, 0.12);
+    root.style.setProperty('--btn-cancel-bg', btnCancelBg);
+    root.style.setProperty('--btn-cancel-text', vars.contentTextMuted);
+    root.style.setProperty('--btn-cancel-hover-bg', btnCancelHoverBg);
+
+    root.style.setProperty('--btn-secondary-bg', 'transparent');
+    root.style.setProperty('--btn-secondary-text', vars.contentText);
+    root.style.setProperty('--btn-secondary-border', vars.border);
+    root.style.setProperty('--btn-secondary-hover-bg', rgbaFromHex(vars.primary, 0.06));
+    root.style.setProperty('--btn-secondary-hover-border', vars.primary);
+    root.style.setProperty('--btn-secondary-hover-text', vars.primary);
+
+    root.style.setProperty('--primary-light-50', rgbaFromHex(vars.primary, 0.04));
+    root.style.setProperty('--primary-light-100', rgbaFromHex(vars.primary, 0.06));
+    root.style.setProperty('--primary-light-200', rgbaFromHex(vars.primary, 0.2));
+
+    const cardBg = isContentLight
+      ? vars.contentBg
+      : rgbaFromHex('#ffffff', 0.03);
+    const cardHoverBg = isContentLight
+      ? rgbaFromHex(vars.contentText, 0.02)
+      : rgbaFromHex('#ffffff', 0.05);
+    root.style.setProperty('--content-card-bg', cardBg);
+    root.style.setProperty('--content-card-bg-hover', cardHoverBg);
+
     if (theme.font) {
       root.style.setProperty('--font-family-base', theme.font);
     } else {
@@ -300,7 +391,6 @@ const ThemeSystem = (() => {
     if (contentRgb) {
       const brightness = (contentRgb.r * 299 + contentRgb.g * 587 + contentRgb.b * 114) / 1000;
       root.style.setProperty('--content-overlay-opacity', brightness > 128 ? '0.03' : '0.05');
-      root.style.setProperty('--content-card-bg', brightness > 128 ? '#ffffff' : 'rgba(255,255,255,0.03)');
     }
 
     root.setAttribute('data-theme', theme.id);
