@@ -73,6 +73,9 @@
       </div>
       <div class="stat-divider"></div>
       <div class="bar-chart" id="barChart"></div>
+      <button class="stats-open-btn" id="statsOpenBtn" title="查看详细统计">
+        <span>📊</span> 统计
+      </button>
     </footer>
   </div>
 
@@ -141,6 +144,99 @@
     </div>
   </div>
 
+  <!-- 统计弹窗 -->
+  <div class="modal-overlay stats-modal-overlay" id="statsModal" style="display:none;">
+    <div class="stats-modal">
+      <div class="modal-header stats-modal-header">
+        <h3 class="modal-title">📊 统计数据</h3>
+        <button class="modal-close" id="closeStats">✕</button>
+      </div>
+
+      <!-- 概览卡片 -->
+      <div class="stats-overview">
+        <div class="overview-card">
+          <div class="overview-icon">🔥</div>
+          <div class="overview-info">
+            <span class="overview-label">当前连续</span>
+            <span class="overview-value" id="currentStreak">0 天</span>
+          </div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-icon">🏆</div>
+          <div class="overview-info">
+            <span class="overview-label">最长连续</span>
+            <span class="overview-value" id="longestStreak">0 天</span>
+          </div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-icon">⏱️</div>
+          <div class="overview-info">
+            <span class="overview-label">累计专注</span>
+            <span class="overview-value" id="totalMinutes">0 分钟</span>
+          </div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-icon">🍅</div>
+          <div class="overview-info">
+            <span class="overview-label">累计番茄</span>
+            <span class="overview-value" id="totalPomodoros">0 个</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日历热力图 -->
+      <div class="stats-section">
+        <h4 class="stats-section-title">过去一年贡献热力图</h4>
+        <div class="heatmap-container" id="heatmapContainer"></div>
+        <div class="heatmap-legend">
+          <span>少</span>
+          <div class="legend-colors">
+            <span class="legend-color level-0"></span>
+            <span class="legend-color level-1"></span>
+            <span class="legend-color level-2"></span>
+            <span class="legend-color level-3"></span>
+            <span class="legend-color level-4"></span>
+          </div>
+          <span>多</span>
+        </div>
+      </div>
+
+      <!-- 趋势折线图 -->
+      <div class="stats-section">
+        <div class="stats-section-header">
+          <h4 class="stats-section-title">专注时长趋势</h4>
+          <div class="trend-toggle">
+            <button class="trend-toggle-btn active" data-period="30days">30天</button>
+            <button class="trend-toggle-btn" data-period="12weeks">12周</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 时段分布和标签分布并排 -->
+      <div class="stats-row">
+        <div class="stats-section half">
+          <h4 class="stats-section-title">时段分布</h4>
+          <div class="chart-container">
+            <canvas id="hourChart"></canvas>
+          </div>
+        </div>
+        <div class="stats-section half">
+          <h4 class="stats-section-title">标签分布</h4>
+          <div class="chart-container pie-chart-container">
+            <canvas id="tagChart"></canvas>
+          </div>
+          <div class="tag-empty-hint" id="tagEmptyHint" style="display:none;">
+            暂无标签数据。在记录内容中使用 <code>#标签名</code> 来添加标签。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="node_modules/chart.js/dist/chart.umd.min.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

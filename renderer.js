@@ -22,6 +22,12 @@ let state = {
   settings: { ...DEFAULT_SHORTCUTS },
   tempSettings: { ...DEFAULT_SHORTCUTS },
   recordingShortcut: null,
+  charts: {
+    trend: null,
+    hour: null,
+    tag: null,
+  },
+  trendPeriod: '30days',
 };
 
 const el = {
@@ -56,6 +62,19 @@ const el = {
   errorToggleTimer: document.getElementById('errorToggleTimer'),
   errorResetTimer: document.getElementById('errorResetTimer'),
   errorToggleWindow: document.getElementById('errorToggleWindow'),
+  statsOpenBtn: document.getElementById('statsOpenBtn'),
+  statsModal: document.getElementById('statsModal'),
+  closeStats: document.getElementById('closeStats'),
+  heatmapContainer: document.getElementById('heatmapContainer'),
+  currentStreak: document.getElementById('currentStreak'),
+  longestStreak: document.getElementById('longestStreak'),
+  totalMinutes: document.getElementById('totalMinutes'),
+  totalPomodoros: document.getElementById('totalPomodoros'),
+  trendChart: document.getElementById('trendChart'),
+  hourChart: document.getElementById('hourChart'),
+  tagChart: document.getElementById('tagChart'),
+  tagEmptyHint: document.getElementById('tagEmptyHint'),
+  trendToggleBtns: document.querySelectorAll('.trend-toggle-btn'),
 };
 
 function getDateKey(d) {
@@ -437,6 +456,558 @@ function renderStats() {
   });
 }
 
+function extractTags(content) {
+  const regex = /#(\S+)/g;
+  const tags = [];
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    tags.push(match[1].toLowerCase());
+  }
+  return tags;
+}
+
+function getStreakData() {
+  const dateKeys = Object.keys(state.data.records).sort();
+  if (dateKeys.length === 0) {
+    return { current: 0, longest: 0 };
+  }
+
+  let longestStreak = 0;
+  let currentStreak = 0;
+  let prevDate = null;
+
+  const today = new Date();
+  const todayKey = getDateKey(today);
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = getDateKey(yesterday);
+
+  const hasToday = dateKeys.includes(todayKey);
+  const hasYesterday = dateKeys.includes(yesterdayKey);
+
+  if (!hasToday && !hasYesterday) {
+    currentStreak = 0;
+  } else {
+    let checkDate = hasToday ? new Date(today) : new Date(yesterday);
+    while (true) {
+      const key = getDateKey(checkDate);
+      if (dateKeys.includes(key)) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  let tempStreak = 0;
+  for (let i = 0; i < dateKeys.length; i++) {
+    const current = new Date(dateKeys[i]);
+    if (prevDate === null) {
+      tempStreak = 1;
+    } else {
+      const diffDays = Math.floor((current - prevDate) / (1000 * 60 * 60 * 24));
+      if (diffDays === 1) {
+        tempStreak++;
+      } else {
+        tempStreak = 1;
+      }
+    }
+    longestStreak = Math.max(longestStreak, tempStreak);
+    prevDate = current;
+  }
+
+  return { current: currentStreak, longest: longestStreak };
+}
+
+function getTotalStats() {
+  let totalMin = 0;
+  let totalCount = 0;
+
+  Object.values(state.data.records).forEach((records) => {
+    records.forEach((r) => {
+      totalMin += r.durationMinutes;
+      totalCount++;
+    });
+  });
+
+  return { totalMin, totalCount };
+}
+
+function getYearData() {
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 364);
+  startDate.setHours(0, 0, 0, 0);
+
+  const days = [];
+  const current = new Date(startDate);
+  while (current <= today) {
+    const key = getDateKey(current);
+    const minutes = calculateMinutesForDate(key);
+    days.push({
+      date: new Date(current),
+      dateKey: key,
+      minutes,
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
+}
+
+function getHeatmapLevel(minutes) {
+  if (minutes === 0) return 0;
+  if (minutes < 30) return 1;
+  if (minutes < 60) return 2;
+  if (minutes < 120) return 3;
+  return 4;
+}
+
+function renderHeatmap() {
+  const yearData = getYearData();
+  el.heatmapContainer.innerHTML = '';
+
+  const weeks = [];
+  let currentWeek = [];
+  const firstDay = yearData[0].date.getDay();
+  for (let i = 0; i < firstDay; i++) {
+    currentWeek.push(null);
+  }
+
+  yearData.forEach((day) => {
+    currentWeek.push(day);
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  });
+
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push(null);
+    }
+    weeks.push(currentWeek);
+  }
+
+  weeks.forEach((week) => {
+    const weekEl = document.createElement('div');
+    weekEl.className = 'heatmap-week';
+
+    week.forEach((day) => {
+      const dayEl = document.createElement('div');
+      dayEl.className = 'heatmap-day';
+
+      if (day !== null) {
+        const level = getHeatmapLevel(day.minutes);
+        if (level > 0) {
+          dayEl.classList.add(`level-${level}`);
+        }
+        dayEl.title = `${day.dateKey}: ${day.minutes} 分钟`;
+      } else {
+        dayEl.style.visibility = 'hidden';
+      }
+
+      weekEl.appendChild(dayEl);
+    });
+
+    el.heatmapContainer.appendChild(weekEl);
+  });
+}
+
+function getTrendData30Days() {
+  const today = new Date();
+  const labels = [];
+  const data = [];
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = getDateKey(d);
+    const minutes = calculateMinutesForDate(key);
+    labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
+    data.push(minutes);
+  }
+
+  return { labels, data };
+}
+
+function getTrendData12Weeks() {
+  const labels = [];
+  const data = [];
+
+  for (let i = 11; i >= 0; i--) {
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() - i * 7);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+
+    let weekMinutes = 0;
+    for (let j = 0; j < 7; j++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + j);
+      const key = getDateKey(d);
+      weekMinutes += calculateMinutesForDate(key);
+    }
+
+    labels.push(`第${12 - i}周`);
+    data.push(weekMinutes);
+  }
+
+  return { labels, data };
+}
+
+function renderTrendChart() {
+  const ctx = el.trendChart.getContext('2d');
+  const trendData = state.trendPeriod === '30days' ? getTrendData30Days() : getTrendData12Weeks();
+
+  if (state.charts.trend) {
+    state.charts.trend.destroy();
+  }
+
+  state.charts.trend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: trendData.labels,
+      datasets: [{
+        label: '专注时长（分钟）',
+        data: trendData.data,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#22c55e',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          titleFont: {
+            family: 'DM Sans',
+            size: 13,
+          },
+          bodyFont: {
+            family: 'DM Mono',
+            size: 12,
+          },
+          padding: 10,
+          cornerRadius: 8,
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false,
+          },
+          ticks: {
+            font: {
+              family: 'DM Sans',
+              size: 11,
+            },
+            color: '#999',
+            maxRotation: 0,
+            maxTicksLimit: 10,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: '#f0f0f0',
+          },
+          ticks: {
+            font: {
+              family: 'DM Mono',
+              size: 11,
+            },
+            color: '#999',
+          },
+        },
+      },
+    },
+  });
+}
+
+function getHourDistribution() {
+  const hours = new Array(24).fill(0);
+
+  Object.values(state.data.records).forEach((records) => {
+    records.forEach((r) => {
+      const startDate = new Date(r.startTime);
+      const startHour = startDate.getHours();
+      const totalMinutes = r.durationMinutes;
+      const startMinute = startDate.getMinutes();
+
+      let remaining = totalMinutes;
+      let currentHour = startHour;
+      let minutesInFirstHour = 60 - startMinute;
+
+      if (remaining <= minutesInFirstHour) {
+        hours[currentHour] += remaining;
+      } else {
+        hours[currentHour] += minutesInFirstHour;
+        remaining -= minutesInFirstHour;
+        currentHour++;
+
+        while (remaining > 0 && currentHour < 24) {
+          const addMinutes = Math.min(remaining, 60);
+          hours[currentHour] += addMinutes;
+          remaining -= addMinutes;
+          currentHour++;
+        }
+      }
+    });
+  });
+
+  return hours;
+}
+
+function renderHourChart() {
+  const ctx = el.hourChart.getContext('2d');
+  const hourData = getHourDistribution();
+  const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+
+  if (state.charts.hour) {
+    state.charts.hour.destroy();
+  }
+
+  state.charts.hour = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '专注时长（分钟）',
+        data: hourData,
+        backgroundColor: hourData.map((v) => v > 0 ? '#22c55e' : '#e5e7eb'),
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          titleFont: {
+            family: 'DM Sans',
+            size: 13,
+          },
+          bodyFont: {
+            family: 'DM Mono',
+            size: 12,
+          },
+          padding: 10,
+          cornerRadius: 8,
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            display: false,
+          },
+          ticks: {
+            font: {
+              family: 'DM Mono',
+              size: 10,
+            },
+            color: '#999',
+            maxRotation: 45,
+            maxTicksLimit: 12,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: '#f0f0f0',
+          },
+          ticks: {
+            font: {
+              family: 'DM Mono',
+              size: 10,
+            },
+            color: '#999',
+          },
+        },
+      },
+    },
+  });
+}
+
+function getTagDistribution() {
+  const tagMinutes = {};
+  const tagCount = {};
+
+  Object.values(state.data.records).forEach((records) => {
+    records.forEach((r) => {
+      const tags = extractTags(r.content);
+      if (tags.length === 0) return;
+
+      const minutesPerTag = r.durationMinutes / tags.length;
+      tags.forEach((tag) => {
+        if (!tagMinutes[tag]) {
+          tagMinutes[tag] = 0;
+          tagCount[tag] = 0;
+        }
+        tagMinutes[tag] += minutesPerTag;
+        tagCount[tag]++;
+      });
+    });
+  });
+
+  const sortedTags = Object.entries(tagMinutes)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([tag, minutes]) => ({ tag, minutes, count: tagCount[tag] }));
+
+  return sortedTags;
+}
+
+function renderTagChart() {
+  const ctx = el.tagChart.getContext('2d');
+  const tagData = getTagDistribution();
+
+  if (state.charts.tag) {
+    state.charts.tag.destroy();
+  }
+
+  if (tagData.length === 0) {
+    el.tagEmptyHint.style.display = 'block';
+    el.tagChart.style.display = 'none';
+    return;
+  }
+
+  el.tagEmptyHint.style.display = 'none';
+  el.tagChart.style.display = 'block';
+
+  const colors = [
+    '#22c55e',
+    '#3b82f6',
+    '#f59e0b',
+    '#ef4444',
+    '#8b5cf6',
+    '#ec4899',
+    '#14b8a6',
+    '#f97316',
+  ];
+
+  state.charts.tag = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: tagData.map((t) => `#${t.tag}`),
+      datasets: [{
+        data: tagData.map((t) => Math.round(t.minutes)),
+        backgroundColor: colors.slice(0, tagData.length),
+        borderWidth: 0,
+        spacing: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            font: {
+              family: 'DM Sans',
+              size: 11,
+            },
+            color: '#666',
+            padding: 10,
+            usePointStyle: true,
+            pointStyle: 'circle',
+          },
+        },
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          titleFont: {
+            family: 'DM Sans',
+            size: 13,
+          },
+          bodyFont: {
+            family: 'DM Mono',
+            size: 12,
+          },
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (context) => {
+              const tagIndex = context.dataIndex;
+              const tag = tagData[tagIndex];
+              return `${tag.minutes} 分钟 (${tag.count}个番茄)`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderOverviewStats() {
+  const streakData = getStreakData();
+  const totalStats = getTotalStats();
+
+  el.currentStreak.textContent = `${streakData.current} 天`;
+  el.longestStreak.textContent = `${streakData.longest} 天`;
+  el.totalMinutes.textContent = `${totalStats.totalMin} 分钟`;
+  el.totalPomodoros.textContent = `${totalStats.totalCount} 个`;
+}
+
+function renderAllStats() {
+  renderOverviewStats();
+  renderHeatmap();
+  renderTrendChart();
+  renderHourChart();
+  renderTagChart();
+}
+
+function openStatsModal() {
+  el.statsModal.style.display = 'flex';
+  setTimeout(() => {
+    renderAllStats();
+  }, 50);
+}
+
+function closeStatsModal() {
+  el.statsModal.style.display = 'none';
+}
+
+function setupStatsModal() {
+  el.statsOpenBtn.addEventListener('click', openStatsModal);
+  el.closeStats.addEventListener('click', closeStatsModal);
+
+  el.statsModal.addEventListener('click', (e) => {
+    if (e.target === el.statsModal) {
+      closeStatsModal();
+    }
+  });
+
+  el.trendToggleBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      el.trendToggleBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.trendPeriod = btn.dataset.period;
+      renderTrendChart();
+    });
+  });
+}
+
 function setupDurationButtons() {
   document.querySelectorAll('.duration-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -679,6 +1250,7 @@ async function init() {
   setupControls();
   setupSettings();
   setupShortcutInputs();
+  setupStatsModal();
   updateTimerDisplay();
   renderTomatoes();
   renderRecords();
