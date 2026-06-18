@@ -2329,9 +2329,11 @@ html, body {
   color: #bbb;
   text-align: right;
   position: absolute;
-  right: auto;
-  width: 56px;
-  transform: translateY(-7px);
+  top: -5px;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background: transparent;
 }
 
 .cal-week-row {
@@ -2342,6 +2344,7 @@ html, body {
   border-right: 1px solid #f0f0f0;
   border-bottom: 1px solid #f0f0f0;
   position: relative;
+  box-sizing: border-box;
 }
 
 .cal-week-day-cell {
@@ -2350,6 +2353,7 @@ html, body {
   position: relative;
   cursor: pointer;
   transition: background 0.1s;
+  box-sizing: border-box;
 }
 
 .cal-week-day-cell:hover {

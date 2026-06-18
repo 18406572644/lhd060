@@ -2348,6 +2348,7 @@ function renderWeekView() {
   const totalHours = endHour - startHour;
   const totalSlots = (totalHours * 60) / zoom;
   const slotHeight = Math.max(zoom * 1.2, 30);
+  const gridTotalHeight = totalSlots * slotHeight;
   const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
 
   let headerHtml = '<div class="cal-week-header">';
@@ -2369,7 +2370,7 @@ function renderWeekView() {
   headerHtml += '</div>';
 
   let gridHtml = `<div class="cal-week-body" id="calWeekBody">
-    <div class="cal-week-grid" style="grid-template-columns:56px repeat(7,1fr);">`;
+    <div class="cal-week-grid" id="calWeekGrid" style="grid-template-columns:56px repeat(7,1fr);position:relative;height:${gridTotalHeight}px;">`;
 
   for (let slot = 0; slot < totalSlots; slot++) {
     const minutesFromStart = slot * zoom;
@@ -2393,64 +2394,101 @@ function renderWeekView() {
   }
 
   gridHtml += '</div></div>';
-
   el.calWeekView.innerHTML = headerHtml + gridHtml;
 
   requestAnimationFrame(() => {
     const weekBody = document.getElementById('calWeekBody');
     if (!weekBody) return;
-
-    const grid = weekBody.querySelector('.cal-week-grid');
+    const grid = document.getElementById('calWeekGrid');
     if (!grid) return;
+
+    const dayCellsAll = grid.querySelectorAll('.cal-week-day-cell');
+    if (dayCellsAll.length === 0) return;
+    const sampleCell = dayCellsAll[0];
+    const cellWidth = sampleCell.getBoundingClientRect().width;
+    const timeColWidth = 56;
 
     weekDates.forEach((d, colIdx) => {
       const dateKey = getDateKey(d);
-      const records = state.data.records[dateKey] || [];
+      const records = (state.data.records[dateKey] || [])
+        .slice()
+        .sort((a, b) => a.startTime - b.startTime);
+      if (records.length === 0) return;
 
+      const groupBuckets = [];
       records.forEach(record => {
         const startDate = new Date(record.startTime);
         const recHour = startDate.getHours();
         const recMin = startDate.getMinutes();
-        if (recHour < startHour) return;
+        const endMinutes = recHour * 60 + recMin + record.durationMinutes;
+        let placed = false;
+        for (let bi = 0; bi < groupBuckets.length; bi++) {
+          const bucket = groupBuckets[bi];
+          const [minStart, maxEnd] = bucket.range;
+          const recStart = recHour * 60 + recMin;
+          const overlap = recStart < maxEnd && endMinutes > minStart;
+          if (overlap) {
+            bucket.items.push(record);
+            bucket.range = [Math.min(minStart, recStart), Math.max(maxEnd, endMinutes)];
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          groupBuckets.push({
+            items: [record],
+            range: [recHour * 60 + recMin, endMinutes],
+          });
+        }
+      });
 
-        const recMinutesFromStart = (recHour - startHour) * 60 + recMin;
-        const topSlot = recMinutesFromStart / zoom;
-        const heightSlots = record.durationMinutes / zoom;
-        const topPx = topSlot * slotHeight;
-        const heightPx = Math.max(heightSlots * slotHeight - 2, 20);
+      groupBuckets.forEach(bucket => {
+        const count = bucket.items.length;
+        const leftBase = timeColWidth + colIdx * cellWidth + 2;
+        const totalCellWidth = cellWidth - 4;
+        const cardWidth = count === 1 ? totalCellWidth : Math.floor((totalCellWidth - (count - 1) * 2) / count);
 
-        const cellSelector = `.cal-week-day-cell[data-date="${dateKey}"][data-slot="0"]`;
-        const firstCell = weekBody.querySelector(cellSelector);
-        if (!firstCell) return;
+        bucket.items.forEach((record, idxInBucket) => {
+          const startDate = new Date(record.startTime);
+          const recHour = startDate.getHours();
+          const recMin = startDate.getMinutes();
+          if (recHour < startHour) return;
 
-        const colWidth = firstCell.offsetWidth;
-        const gridRect = grid.getBoundingClientRect();
-        const firstCellRect = firstCell.getBoundingClientRect();
-        const timeCellWidth = 56;
+          const recMinutesFromStart = (recHour - startHour) * 60 + recMin;
+          const topPx = (recMinutesFromStart / zoom) * slotHeight;
+          const heightPx = Math.max((record.durationMinutes / zoom) * slotHeight - 2, 20);
+          const leftPx = leftBase + idxInBucket * (cardWidth + 2);
 
-        const leftPx = timeCellWidth + colIdx * colWidth + 2;
-        const widthPx = colWidth - 4;
+          const card = document.createElement('div');
+          card.className = 'cal-week-pomodoro-card';
+          card.style.top = topPx + 'px';
+          card.style.height = heightPx + 'px';
+          card.style.width = cardWidth + 'px';
+          card.style.left = leftPx + 'px';
+          card.style.cursor = 'pointer';
 
-        const card = document.createElement('div');
-        card.className = 'cal-week-pomodoro-card';
-        card.style.top = topPx + 'px';
-        card.style.height = heightPx + 'px';
-        card.style.width = widthPx + 'px';
-        card.style.left = leftPx + 'px';
+          const taskShort = record.taskName ? record.taskName.substring(0, 4) : '';
+          const contentShort = (record.content || '').substring(0, 10);
 
-        const taskShort = record.taskName ? record.taskName.substring(0, 4) : '';
-        const contentShort = (record.content || '').substring(0, 10);
+          card.innerHTML = `${taskShort ? `<div class="card-task">${escapeHtml(taskShort)}</div>` : ''}<div class="card-content">${escapeHtml(contentShort)}</div>`;
+          card.title = `${formatTimeRange(record.startTime, record.durationMinutes)}\n${record.taskName ? record.taskName + ' - ' : ''}${record.content}`;
 
-        card.innerHTML = `${taskShort ? `<div class="card-task">${escapeHtml(taskShort)}</div>` : ''}<div class="card-content">${escapeHtml(contentShort)}</div>`;
-        card.title = `${formatTimeRange(record.startTime, record.durationMinutes)}\n${record.taskName ? record.taskName + ' - ' : ''}${record.content}`;
+          card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.currentDate = dateKey;
+            el.datePicker.value = dateKey;
+            switchTab('records');
+            editRecord(record.id, dateKey);
+          });
 
-        grid.style.position = 'relative';
-        grid.appendChild(card);
+          grid.appendChild(card);
+        });
       });
     });
 
     weekBody.querySelectorAll('.cal-week-day-cell').forEach(cell => {
-      cell.addEventListener('click', () => {
+      cell.addEventListener('click', (e) => {
+        if (e.target !== cell) return;
         const dateKey = cell.dataset.date;
         const hour = parseInt(cell.dataset.hour, 10);
         const min = parseInt(cell.dataset.min, 10);
