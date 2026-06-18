@@ -159,6 +159,7 @@ const el = {
   projectCollapseBtn: document.getElementById('projectCollapseBtn'),
   projectListContainer: document.getElementById('projectListContainer'),
   projectList: document.getElementById('projectList'),
+  addProjectBtn: document.getElementById('addProjectBtn'),
   manageProjectsBtn: document.getElementById('manageProjectsBtn'),
   projectDashboardBtn: document.getElementById('projectDashboardBtn'),
   allProjectCount: document.getElementById('allProjectCount'),
@@ -858,21 +859,23 @@ function renderProjectSelector() {
   el.projectList.innerHTML = '';
 
   const allItem = document.createElement('div');
-  allItem.className = `project-selector-item ${state.selectedProjectId === 'all' ? 'active' : ''}`;
+  allItem.className = `project-item ${state.selectedProjectId === 'all' ? 'active' : ''}`;
+  allItem.dataset.projectId = 'all';
   allItem.innerHTML = `
-    <div class="project-selector-color" style="background: #22c55e;"></div>
-    <span class="project-selector-name">全部任务</span>
-    <span class="project-selector-count">${allCount}</span>
+    <span class="project-color-dot" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></span>
+    <span class="project-name">所有项目</span>
+    <span class="project-task-count">${allCount}</span>
   `;
   allItem.addEventListener('click', () => selectProject('all'));
   el.projectList.appendChild(allItem);
 
   const noneItem = document.createElement('div');
-  noneItem.className = `project-selector-item ${state.selectedProjectId === 'none' ? 'active' : ''}`;
+  noneItem.className = `project-item ${state.selectedProjectId === 'none' ? 'active' : ''}`;
+  noneItem.dataset.projectId = 'none';
   noneItem.innerHTML = `
-    <div class="project-selector-color" style="background: #9ca3af;"></div>
-    <span class="project-selector-name">未分类</span>
-    <span class="project-selector-count">${noneCount}</span>
+    <span class="project-color-dot" style="background: #9ca3af;"></span>
+    <span class="project-name">无项目</span>
+    <span class="project-task-count">${noneCount}</span>
   `;
   noneItem.addEventListener('click', () => selectProject('none'));
   el.projectList.appendChild(noneItem);
@@ -880,11 +883,12 @@ function renderProjectSelector() {
   projects.forEach(project => {
     const count = getProjectTaskCount(project.id);
     const item = document.createElement('div');
-    item.className = `project-selector-item ${state.selectedProjectId === project.id ? 'active' : ''}`;
+    item.className = `project-item ${state.selectedProjectId === project.id ? 'active' : ''}`;
+    item.dataset.projectId = project.id;
     item.innerHTML = `
-      <div class="project-selector-color" style="background: ${project.color};"></div>
-      <span class="project-selector-name">${escapeHtml(project.name)}</span>
-      <span class="project-selector-count">${count}</span>
+      <span class="project-color-dot" style="background: ${project.color};"></span>
+      <span class="project-name">${escapeHtml(project.name)}</span>
+      <span class="project-task-count">${count}</span>
     `;
     item.addEventListener('click', () => selectProject(project.id));
     el.projectList.appendChild(item);
@@ -931,7 +935,7 @@ function renderStatsProjectFilter() {
 function switchTasksViewMode(mode) {
   state.tasksViewMode = mode;
   el.viewToggleBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.viewMode === mode);
+    btn.classList.toggle('active', btn.dataset.view === mode);
   });
   if (state.activeTab === 'tasks') {
     if (mode === 'list') {
@@ -1128,6 +1132,12 @@ function renderTasksByProject() {
   });
 }
 
+function syncProjectColorPicker(color) {
+  document.querySelectorAll('input[name="projectColor"]').forEach(radio => {
+    radio.checked = radio.value === color;
+  });
+}
+
 function openProjectModal() {
   state.editingProjectId = null;
   state.tempProjectColor = '#22c55e';
@@ -1135,6 +1145,7 @@ function openProjectModal() {
   el.projectNameInput.value = '';
   el.projectDescInput.value = '';
   el.projectTargetDate.value = '';
+  syncProjectColorPicker('#22c55e');
   renderProjectManagementList();
   el.projectModal.style.display = 'flex';
   setTimeout(() => el.projectNameInput.focus(), 100);
@@ -1155,6 +1166,7 @@ function openEditProjectModal(projectId) {
   el.projectNameInput.value = project.name;
   el.projectDescInput.value = project.description || '';
   el.projectTargetDate.value = project.targetDate || '';
+  syncProjectColorPicker(project.color);
   el.projectModal.style.display = 'flex';
   setTimeout(() => {
     el.projectNameInput.focus();
@@ -1267,7 +1279,7 @@ function closeProjectDashboardModal() {
 function switchDashboardTab(tab) {
   state.dashboardTab = tab;
   el.dashboardTabBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+    btn.classList.toggle('active', btn.dataset.dashboardTab === tab);
   });
   el.dashboardOverviewTab.style.display = tab === 'overview' ? 'block' : 'none';
   el.dashboardDetailTab.style.display = tab === 'detail' ? 'block' : 'none';
@@ -1281,7 +1293,7 @@ function switchDashboardTab(tab) {
 function switchDashboardModalTab(tab) {
   state.dashboardModalTab = tab;
   el.dashboardModalTabBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+    btn.classList.toggle('active', btn.dataset.dashboardModalTab === tab);
   });
   el.dashboardModalOverviewTab.style.display = tab === 'overview' ? 'block' : 'none';
   el.dashboardModalDetailTab.style.display = tab === 'detail' ? 'block' : 'none';
@@ -1294,7 +1306,8 @@ function switchDashboardModalTab(tab) {
 
 function renderProjectOverview() {
   const projects = getAllProjects();
-  const container = state.activeTab === 'projectDashboard' ? el.projectProgressBars : el.projectProgressBars;
+  const isMainTab = state.activeTab === 'projectDashboard';
+  const container = isMainTab ? el.projectProgressChart : el.projectProgressBars;
 
   if (!container) return;
 
@@ -1368,7 +1381,8 @@ function renderProjectOverview() {
 
 function renderProjectDetailCards() {
   const projects = getAllProjects();
-  const container = state.activeTab === 'projectDashboard' ? el.projectDetailCards : el.projectDetailCards;
+  const isMainTab = state.activeTab === 'projectDashboard';
+  const container = isMainTab ? el.projectCardsContainer : el.projectDetailCards;
 
   if (!container) return;
 
@@ -1561,6 +1575,7 @@ function renderProjectDashboard() {
 }
 
 function setupProjectControls() {
+  el.addProjectBtn.addEventListener('click', openProjectModal);
   el.manageProjectsBtn.addEventListener('click', openProjectModal);
   el.projectDashboardBtn.addEventListener('click', openProjectDashboardModal);
 
@@ -1582,6 +1597,12 @@ function setupProjectControls() {
     }
   });
 
+  document.querySelectorAll('input[name="projectColor"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      state.tempProjectColor = e.target.value;
+    });
+  });
+
   el.closeProjectDashboardModal.addEventListener('click', closeProjectDashboardModal);
   el.projectDashboardModal.addEventListener('click', (e) => {
     if (e.target === el.projectDashboardModal) {
@@ -1590,18 +1611,18 @@ function setupProjectControls() {
   });
 
   el.dashboardTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => switchDashboardTab(btn.dataset.tab));
+    btn.addEventListener('click', () => switchDashboardTab(btn.dataset.dashboardTab));
   });
 
   el.dashboardModalTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => switchDashboardModalTab(btn.dataset.tab));
+    btn.addEventListener('click', () => switchDashboardModalTab(btn.dataset.dashboardModalTab));
   });
 
   el.projectCollapseBtn.addEventListener('click', toggleProjectSelector);
 
   el.viewToggleBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      switchTasksViewMode(btn.dataset.viewMode);
+      switchTasksViewMode(btn.dataset.view);
     });
   });
 
@@ -1952,7 +1973,11 @@ function switchTab(tab) {
   el.calendarTab.style.display = tab === 'calendar' ? 'flex' : 'none';
   el.projectDashboardTab.style.display = tab === 'projectDashboard' ? 'flex' : 'none';
   if (tab === 'tasks') {
-    renderTasks();
+    if (state.tasksViewMode === 'project') {
+      renderTasksByProject();
+    } else {
+      renderTasks();
+    }
     renderTasksSummary();
   } else if (tab === 'records') {
     renderRecords();
@@ -2049,7 +2074,11 @@ function renderAll() {
   renderTaskProjectSelect();
   renderStatsProjectFilter();
   if (state.activeTab === 'tasks') {
-    renderTasks();
+    if (state.tasksViewMode === 'project') {
+      renderTasksByProject();
+    } else {
+      renderTasks();
+    }
     renderTasksSummary();
   } else if (state.activeTab === 'records') {
     renderRecords();
