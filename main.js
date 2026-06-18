@@ -89,23 +89,43 @@ function carryOverUnfinishedTasks(data) {
     data.tasks[today] = [];
   }
 
+  const todayMaxOrder = data.tasks[today].reduce((max, t) => {
+    return typeof t.order === 'number' ? Math.max(max, t.order) : max;
+  }, -1);
+
+  let nextOrder = todayMaxOrder + 1;
+
   const dates = Object.keys(data.tasks).sort();
   dates.forEach(dateKey => {
     if (dateKey >= today) return;
 
     const tasks = data.tasks[dateKey] || [];
-    tasks.forEach(task => {
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 999999;
+      const orderB = typeof b.order === 'number' ? b.order : 999999;
+      return orderA - orderB;
+    });
+
+    sortedTasks.forEach(task => {
       if (task.status !== 'completed') {
         const existingTask = data.tasks[today].find(t => t.id === task.id);
         if (!existingTask) {
-          data.tasks[today].push({
+          const newTask = {
             ...task,
             isCarriedOver: true,
             originalDate: task.originalDate || dateKey,
-          });
+            order: nextOrder++,
+          };
+          data.tasks[today].push(newTask);
         }
       }
     });
+  });
+
+  data.tasks[today].forEach((task, idx) => {
+    if (typeof task.order !== 'number') {
+      task.order = idx;
+    }
   });
 
   data.lastActiveDate = today;

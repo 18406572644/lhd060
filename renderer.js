@@ -354,7 +354,19 @@ async function persistData() {
 }
 
 function getTasksForDate(dateKey) {
-  return state.data.tasks[dateKey] || [];
+  const tasks = state.data.tasks[dateKey] || [];
+  let maxOrder = tasks.length > 0
+    ? Math.max(...tasks.map(t => typeof t.order === 'number' ? t.order : -1))
+    : -1;
+  let needNormalize = maxOrder === -1 || tasks.some(t => typeof t.order !== 'number');
+  if (needNormalize) {
+    tasks.forEach((t, idx) => {
+      if (typeof t.order !== 'number') {
+        t.order = idx;
+      }
+    });
+  }
+  return tasks;
 }
 
 function getSortedTasks(dateKey) {
@@ -362,7 +374,9 @@ function getSortedTasks(dateKey) {
   return [...tasks].sort((a, b) => {
     if (a.status === 'completed' && b.status !== 'completed') return 1;
     if (a.status !== 'completed' && b.status === 'completed') return -1;
-    return b.priority - a.priority || b.createdAt - a.createdAt;
+    const orderA = typeof a.order === 'number' ? a.order : 999999;
+    const orderB = typeof b.order === 'number' ? b.order : 999999;
+    return orderA - orderB;
   });
 }
 
@@ -372,6 +386,11 @@ function generateTaskId() {
 
 function addTask(name, estimatedPomodoros, priority) {
   const today = getDateKey(new Date());
+  const currentTasks = getTasksForDate(today);
+  const maxOrder = currentTasks.length > 0
+    ? Math.max(...currentTasks.map(t => typeof t.order === 'number' ? t.order : -1))
+    : -1;
+
   const task = {
     id: generateTaskId(),
     name: name.trim(),
@@ -383,6 +402,7 @@ function addTask(name, estimatedPomodoros, priority) {
     completedAt: null,
     isCarriedOver: false,
     originalDate: today,
+    order: maxOrder + 1,
   };
 
   if (!state.data.tasks[today]) {
@@ -557,22 +577,28 @@ function renderTasks() {
         <span class="task-drag-dot"></span>
       </div>
       <div class="task-actions">
-        <button class="task-action-btn" data-action="edit" title="编辑">✎</button>
-        <button class="task-action-btn delete" data-action="delete" title="删除">✕</button>
+        <button class="task-action-btn" data-action="edit" title="编辑" draggable="false">✎</button>
+        <button class="task-action-btn delete" data-action="delete" title="删除" draggable="false">✕</button>
       </div>
     `;
 
     const statusToggle = card.querySelector('.task-status-toggle');
-    statusToggle.addEventListener('click', () => {
+    statusToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
       toggleTaskStatus(task.id);
       renderAll();
     });
+    statusToggle.setAttribute('draggable', 'false');
 
     const editBtn = card.querySelector('[data-action="edit"]');
-    editBtn.addEventListener('click', () => openEditTaskModal(task.id));
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditTaskModal(task.id);
+    });
 
     const deleteBtn = card.querySelector('[data-action="delete"]');
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (confirm(`确定要删除任务"${task.name}"吗？`)) {
         deleteTask(task.id);
         if (state.currentTaskId === task.id) {
@@ -582,11 +608,12 @@ function renderTasks() {
       }
     });
 
-    card.addEventListener('dragstart', handleDragStart);
-    card.addEventListener('dragend', handleDragEnd);
-    card.addEventListener('dragover', handleDragOver);
-    card.addEventListener('drop', handleDrop);
-    card.addEventListener('dragleave', handleDragLeave);
+    const noDragElements = card.querySelectorAll('.task-status-toggle, .task-actions, .task-action-btn');
+    noDragElements.forEach(el => {
+      el.setAttribute('draggable', 'false');
+      el.addEventListener('mousedown', (e) => e.stopPropagation());
+      el.addEventListener('dragstart', (e) => e.preventDefault());
+    });
 
     el.tasksContainer.appendChild(card);
   });
@@ -683,9 +710,13 @@ function switchTab(tab) {
 }
 
 function handleDragStart(e) {
-  state.draggedTaskId = e.currentTarget.dataset.taskId;
+  const taskId = e.currentTarget.dataset.taskId;
+  state.draggedTaskId = taskId;
   e.currentTarget.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
+  try {
+    e.dataTransfer.setData('text/plain', taskId);
+  } catch (err) {}
 }
 
 function handleDragEnd(e) {
@@ -698,42 +729,63 @@ function handleDragEnd(e) {
 
 function handleDragOver(e) {
   e.preventDefault();
+  e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
   const card = e.currentTarget;
   if (card.dataset.taskId !== state.draggedTaskId) {
     card.classList.add('drag-over');
   }
+  return false;
 }
 
 function handleDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
+  const card = e.currentTarget;
+  const rect = card.getBoundingClientRect();
+  const x = e.clientX;
+  const y = e.clientY;
+  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    card.classList.remove('drag-over');
+  }
 }
 
 function handleDrop(e) {
   e.preventDefault();
+  e.stopPropagation();
+
   const targetTaskId = e.currentTarget.dataset.taskId;
   e.currentTarget.classList.remove('drag-over');
 
-  if (!state.draggedTaskId || state.draggedTaskId === targetTaskId) return;
+  if (!state.draggedTaskId || state.draggedTaskId === targetTaskId) {
+    return false;
+  }
 
   const today = state.currentDate;
-  const tasks = state.data.tasks[today];
-  if (!tasks) return;
+  let tasks = state.data.tasks[today];
+  if (!tasks || tasks.length === 0) {
+    return false;
+  }
+
+  tasks = getTasksForDate(today);
 
   const draggedIdx = tasks.findIndex(t => t.id === state.draggedTaskId);
   const targetIdx = tasks.findIndex(t => t.id === targetTaskId);
 
-  if (draggedIdx === -1 || targetIdx === -1) return;
+  if (draggedIdx === -1 || targetIdx === -1) {
+    return false;
+  }
 
   const [draggedTask] = tasks.splice(draggedIdx, 1);
   tasks.splice(targetIdx, 0, draggedTask);
 
   tasks.forEach((task, idx) => {
-    task.priority = Math.max(1, Math.min(3, task.priority));
+    task.order = idx;
   });
+
+  state.data.tasks[today] = tasks;
 
   persistData();
   renderAll();
+  return false;
 }
 
 function renderAll() {
@@ -1742,6 +1794,99 @@ function setupTaskControls() {
     if (e.target === el.taskModal) {
       closeTaskModal();
     }
+  });
+
+  el.tasksContainer.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.task-card');
+    if (!card) {
+      e.preventDefault();
+      return;
+    }
+    const noDrag = e.target.closest('.task-status-toggle, .task-actions, .task-action-btn');
+    if (noDrag) {
+      e.preventDefault();
+      return;
+    }
+    const taskId = card.dataset.taskId;
+    state.draggedTaskId = taskId;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', taskId);
+    } catch (err) {}
+  });
+
+  el.tasksContainer.addEventListener('dragend', (e) => {
+    const card = e.target.closest('.task-card');
+    if (!card) return;
+    state.draggedTaskId = null;
+    card.classList.remove('dragging');
+    document.querySelectorAll('.task-card').forEach(c => c.classList.remove('drag-over'));
+  });
+
+  el.tasksContainer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const card = e.target.closest('.task-card');
+    if (!card) return false;
+    if (!state.draggedTaskId) return false;
+    if (card.dataset.taskId === state.draggedTaskId) return false;
+    e.dataTransfer.dropEffect = 'move';
+    card.classList.add('drag-over');
+    return false;
+  });
+
+  el.tasksContainer.addEventListener('dragleave', (e) => {
+    const card = e.target.closest('.task-card');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      card.classList.remove('drag-over');
+    }
+  });
+
+  el.tasksContainer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const card = e.target.closest('.task-card');
+    if (!card) return false;
+    const targetTaskId = card.dataset.taskId;
+    card.classList.remove('drag-over');
+
+    if (!state.draggedTaskId || state.draggedTaskId === targetTaskId) {
+      return false;
+    }
+
+    const today = state.currentDate;
+    let tasks = state.data.tasks[today];
+    if (!tasks || tasks.length === 0) {
+      return false;
+    }
+
+    tasks = getTasksForDate(today);
+
+    const draggedIdx = tasks.findIndex(t => t.id === state.draggedTaskId);
+    const targetIdx = tasks.findIndex(t => t.id === targetTaskId);
+
+    if (draggedIdx === -1 || targetIdx === -1) {
+      return false;
+    }
+
+    const [draggedTask] = tasks.splice(draggedIdx, 1);
+    tasks.splice(targetIdx, 0, draggedTask);
+
+    tasks.forEach((task, idx) => {
+      task.order = idx;
+    });
+
+    state.data.tasks[today] = tasks;
+
+    persistData();
+    renderAll();
+    return false;
   });
 }
 
