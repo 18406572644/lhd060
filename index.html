@@ -356,6 +356,72 @@
           <span class="shortcut-error" id="errorToggleWindow"></span>
         </div>
       </div>
+
+      <div class="settings-section theme-settings-section">
+        <h4 class="settings-section-title">主题外观</h4>
+        
+        <div class="follow-system-row">
+          <label class="follow-system-label">
+            <input type="checkbox" id="followSystemToggle" class="follow-system-checkbox" />
+            <span class="follow-system-text">跟随系统（自动亮/暗模式）</span>
+          </label>
+        </div>
+
+        <h5 class="theme-subtitle">内置主题</h5>
+        <div class="theme-grid" id="themeGrid">
+        </div>
+
+        <h5 class="theme-subtitle">自定义主题</h5>
+        <div class="custom-theme-actions">
+          <button class="theme-action-btn" id="openCustomThemeBtn">
+            <span>🎨</span> 创建/编辑自定义主题
+          </button>
+          <button class="theme-action-btn secondary" id="exportThemeBtn" title="导出主题 JSON">
+            <span>📤</span> 导出
+          </button>
+          <button class="theme-action-btn secondary" id="importThemeBtn" title="导入主题 JSON">
+            <span>📥</span> 导入
+          </button>
+          <input type="file" id="importThemeFile" accept=".json,application/json" style="display:none;" />
+        </div>
+        <div class="current-custom-theme" id="currentCustomTheme" style="display:none;">
+          <span class="custom-theme-label">当前使用:</span>
+          <span class="custom-theme-name" id="customThemeName"></span>
+          <button class="custom-theme-reset" id="resetThemeBtn">恢复内置</button>
+        </div>
+      </div>
+
+      <!-- 自定义主题编辑弹窗 -->
+      <div class="modal-overlay custom-theme-modal-overlay" id="customThemeModal" style="display:none;">
+        <div class="modal custom-theme-modal">
+          <div class="modal-header">
+            <h3 class="modal-title">🎨 自定义主题</h3>
+            <button class="modal-close" id="closeCustomThemeModal">✕</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label">主题名称</label>
+            <input type="text" id="customThemeNameInput" class="form-input" maxlength="30" placeholder="给你的主题起个名字..." />
+          </div>
+          <div class="theme-color-grid" id="themeColorGrid">
+          </div>
+          <div class="custom-theme-preview" id="customThemePreview">
+            <div class="preview-label">实时预览</div>
+            <div class="preview-box">
+              <div class="preview-sidebar"></div>
+              <div class="preview-content">
+                <div class="preview-header"></div>
+                <div class="preview-card"></div>
+                <div class="preview-accent"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="modal-btn cancel" id="cancelCustomTheme">取消</button>
+            <button class="modal-btn confirm" id="saveCustomTheme">保存并应用</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button class="modal-btn cancel" id="cancelSettings">取消</button>
         <button class="modal-btn confirm" id="saveSettings">保存</button>
@@ -616,6 +682,7 @@
   </div>
 
   <script src="node_modules/chart.js/dist/chart.umd.min.js"></script>
+  <script src="theme.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

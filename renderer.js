@@ -58,6 +58,10 @@ let state = {
   dashboardModalTab: 'overview',
   statsProjectFilter: '',
   collapsedProjects: {},
+  theme: {
+    customEditorVars: null,
+    customEditorName: ''
+  },
 };
 
 const el = {
@@ -188,6 +192,24 @@ const el = {
   projectProgressBars: document.getElementById('projectProgressBars'),
   projectDetailCards: document.getElementById('projectDetailCards'),
   statsProjectFilter: document.getElementById('statsProjectFilter'),
+
+  themeGrid: document.getElementById('themeGrid'),
+  followSystemToggle: document.getElementById('followSystemToggle'),
+  openCustomThemeBtn: document.getElementById('openCustomThemeBtn'),
+  exportThemeBtn: document.getElementById('exportThemeBtn'),
+  importThemeBtn: document.getElementById('importThemeBtn'),
+  importThemeFile: document.getElementById('importThemeFile'),
+  currentCustomTheme: document.getElementById('currentCustomTheme'),
+  customThemeName: document.getElementById('customThemeName'),
+  resetThemeBtn: document.getElementById('resetThemeBtn'),
+  customThemeModal: document.getElementById('customThemeModal'),
+  closeCustomThemeModal: document.getElementById('closeCustomThemeModal'),
+  customThemeNameInput: document.getElementById('customThemeNameInput'),
+  themeColorGrid: document.getElementById('themeColorGrid'),
+  customThemePreview: document.getElementById('customThemePreview'),
+  cancelCustomTheme: document.getElementById('cancelCustomTheme'),
+  saveCustomTheme: document.getElementById('saveCustomTheme'),
+  timerContainer: document.querySelector('.timer-container'),
 };
 
 function getDateKey(d) {
@@ -261,16 +283,28 @@ function startTimer() {
     applyDeepFocusMode();
   }
 
+  if (el.timerContainer) {
+    el.timerContainer.classList.add('timer-dynamic-active');
+  }
+
   state.timerId = setInterval(() => {
     if (state.remainingSeconds > 0) {
       state.remainingSeconds--;
       updateTimerDisplay();
+      const progress = 1 - (state.remainingSeconds / state.totalSeconds);
+      if (typeof ThemeSystem !== 'undefined') {
+        ThemeSystem.setPomodoroDynamic(true, progress);
+      }
       syncTimerState();
     } else {
       completePomodoro();
     }
   }, 1000);
 
+  const initialProgress = 1 - (state.remainingSeconds / state.totalSeconds);
+  if (typeof ThemeSystem !== 'undefined') {
+    ThemeSystem.setPomodoroDynamic(true, initialProgress);
+  }
   syncTimerState();
 }
 
@@ -281,6 +315,14 @@ function pauseTimer() {
   state.timerId = null;
   el.startBtn.disabled = false;
   el.pauseBtn.disabled = true;
+
+  if (el.timerContainer) {
+    el.timerContainer.classList.remove('timer-dynamic-active');
+  }
+  if (typeof ThemeSystem !== 'undefined') {
+    ThemeSystem.setPomodoroDynamic(false, 0);
+  }
+
   syncTimerState();
 }
 
@@ -293,6 +335,13 @@ function resetTimer() {
 
   if (state.deepFocusMode) {
     toggleDeepFocusMode();
+  }
+
+  if (el.timerContainer) {
+    el.timerContainer.classList.remove('timer-dynamic-active');
+  }
+  if (typeof ThemeSystem !== 'undefined') {
+    ThemeSystem.setPomodoroDynamic(false, 0);
   }
 
   updateTimerDisplay();
@@ -3399,6 +3448,11 @@ function openSettings() {
   el.errorToggleTimer.classList.remove('show');
   el.errorResetTimer.classList.remove('show');
   el.errorToggleWindow.classList.remove('show');
+
+  if (typeof ThemeSystem !== 'undefined') {
+    renderThemeSettings();
+  }
+
   el.settingsModal.style.display = 'flex';
 }
 
@@ -3413,6 +3467,422 @@ async function saveSettingsHandler() {
     state.settings = { ...state.tempSettings };
     closeSettings();
   }
+}
+
+/* ================================
+   主题系统渲染与交互函数
+   ================================ */
+
+function renderThemeSettings() {
+  if (typeof ThemeSystem === 'undefined') return;
+  const cfg = ThemeSystem.getConfig();
+  if (el.followSystemToggle) {
+    el.followSystemToggle.checked = cfg.followSystem;
+  }
+  renderThemeGrid();
+  renderCurrentCustomTheme();
+}
+
+function renderThemeGrid() {
+  if (!el.themeGrid || typeof ThemeSystem === 'undefined') return;
+
+  const themes = ThemeSystem.getBuiltinThemes();
+  const cfg = ThemeSystem.getConfig();
+  const effectiveTheme = ThemeSystem.getEffectiveTheme();
+  const effectiveId = cfg.followSystem
+    ? '__follow__'
+    : effectiveTheme.id;
+
+  el.themeGrid.innerHTML = '';
+
+  const customEntry = cfg.mode === 'custom' && cfg.customTheme
+    ? [{
+        id: '__custom__',
+        name: cfg.customTheme.name || '自定义主题',
+        description: '你自定义的主题',
+        preview: cfg.customTheme.preview || { sidebar: cfg.customTheme.vars.sidebarBg, content: cfg.customTheme.vars.contentBg, accent: cfg.customTheme.vars.primary },
+        isCustom: true
+      }]
+    : [];
+
+  const all = [...customEntry, ...themes];
+
+  all.forEach(theme => {
+    const isActive = (theme.id === effectiveId) ||
+      (theme.id === '__custom__' && cfg.mode === 'custom' && !cfg.followSystem) ||
+      (theme.id === cfg.themeId && cfg.mode === 'builtin' && !cfg.followSystem);
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = `theme-card ${isActive ? 'active' : ''}`;
+    card.dataset.themeId = theme.id;
+
+    const p = theme.preview;
+    const isLightSide = isLikelyLightColor(p.sidebar);
+    const isLightContent = isLikelyLightColor(p.content);
+
+    card.innerHTML = `
+      <div class="theme-check-mark">✓</div>
+      <div class="theme-thumb">
+        <div class="theme-thumb-sidebar" style="background:${p.sidebar}; color:${p.accent};"></div>
+        <div class="theme-thumb-content" style="background:${p.content}; color:${p.content === '#ffffff' || isLightContent ? '#1a1a2e' : p.accent};">
+          <div class="theme-thumb-header"></div>
+          <div class="theme-thumb-card"></div>
+          <div class="theme-thumb-accent" style="background:${p.accent};"></div>
+        </div>
+      </div>
+      <div class="theme-card-name">
+        ${escapeHtml(theme.name)}
+        <span class="theme-card-desc">${escapeHtml(theme.description || '')}</span>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      if (theme.id === '__custom__') return;
+      ThemeSystem.switchTheme(theme.id);
+      renderThemeGrid();
+      renderCurrentCustomTheme();
+      if (el.followSystemToggle) el.followSystemToggle.checked = false;
+      if (typeof updateThemeDependentCharts === 'function') {
+        updateThemeDependentCharts();
+      }
+    });
+
+    el.themeGrid.appendChild(card);
+  });
+}
+
+function isLikelyLightColor(hex) {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return true;
+  try {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 128;
+  } catch (e) {
+    return true;
+  }
+}
+
+function renderCurrentCustomTheme() {
+  if (!el.currentCustomTheme || typeof ThemeSystem === 'undefined') return;
+
+  const cfg = ThemeSystem.getConfig();
+  if (cfg.mode === 'custom' && cfg.customTheme) {
+    el.currentCustomTheme.style.display = 'flex';
+    if (el.customThemeName) {
+      el.customThemeName.textContent = cfg.customTheme.name || '自定义主题';
+    }
+  } else {
+    el.currentCustomTheme.style.display = 'none';
+  }
+}
+
+function openCustomThemeModal() {
+  if (typeof ThemeSystem === 'undefined') return;
+
+  const cfg = ThemeSystem.getConfig();
+  if (cfg.mode === 'custom' && cfg.customTheme) {
+    state.theme.customEditorVars = { ...cfg.customTheme.vars };
+    state.theme.customEditorName = cfg.customTheme.name || '';
+  } else {
+    const eff = ThemeSystem.getEffectiveTheme();
+    state.theme.customEditorVars = { ...eff.vars };
+    state.theme.customEditorName = '';
+  }
+
+  if (el.customThemeNameInput) {
+    el.customThemeNameInput.value = state.theme.customEditorName;
+  }
+  renderThemeColorGrid();
+  updateCustomThemePreview();
+
+  if (el.customThemeModal) {
+    el.customThemeModal.style.display = 'flex';
+  }
+}
+
+function closeCustomThemeModal() {
+  if (!el.customThemeModal) return;
+  el.customThemeModal.style.display = 'none';
+  state.theme.customEditorVars = null;
+}
+
+function renderThemeColorGrid() {
+  if (!el.themeColorGrid || typeof ThemeSystem === 'undefined') return;
+
+  const keys = ThemeSystem.getThemeKeys();
+  const defaults = ThemeSystem.getDefaultVars();
+  const vars = state.theme.customEditorVars;
+
+  el.themeColorGrid.innerHTML = '';
+
+  keys.forEach(({ key, label }) => {
+    const val = vars[key] || defaults[key];
+    const isRgba = typeof val === 'string' && val.startsWith('rgba');
+    const displayHex = isRgba ? hexFromRgba(val) : val;
+
+    const item = document.createElement('div');
+    item.className = 'theme-color-item';
+    item.dataset.key = key;
+    item.innerHTML = `
+      <label class="theme-color-label">${label}</label>
+      <div class="theme-color-input-row">
+        <input type="color" class="theme-color-swatch" value="${sanitizeHexForInput(displayHex)}" data-key="${key}" />
+        <input type="text" class="theme-color-hex" value="${val}" data-key="${key}" />
+        <button type="button" class="theme-color-reset" data-key="${key}" title="重置默认值">↺</button>
+      </div>
+    `;
+
+    el.themeColorGrid.appendChild(item);
+  });
+
+  el.themeColorGrid.querySelectorAll('.theme-color-swatch').forEach(inp => {
+    inp.addEventListener('input', (e) => {
+      const k = e.target.dataset.key;
+      state.theme.customEditorVars[k] = e.target.value;
+      const hexInput = el.themeColorGrid.querySelector(`.theme-color-hex[data-key="${k}"]`);
+      if (hexInput) hexInput.value = e.target.value;
+      updateCustomThemePreview();
+    });
+  });
+
+  el.themeColorGrid.querySelectorAll('.theme-color-hex').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const k = e.target.dataset.key;
+      let v = e.target.value.trim();
+      if (v.startsWith('#')) {
+        state.theme.customEditorVars[k] = v;
+        const sw = el.themeColorGrid.querySelector(`.theme-color-swatch[data-key="${k}"]`);
+        if (sw) sw.value = sanitizeHexForInput(v);
+      } else if (v.startsWith('rgba')) {
+        state.theme.customEditorVars[k] = v;
+      }
+      updateCustomThemePreview();
+    });
+  });
+
+  el.themeColorGrid.querySelectorAll('.theme-color-reset').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const k = e.currentTarget.dataset.key;
+      state.theme.customEditorVars[k] = defaults[k];
+      const displayHex = typeof defaults[k] === 'string' && defaults[k].startsWith('rgba')
+        ? hexFromRgba(defaults[k])
+        : defaults[k];
+      const sw = el.themeColorGrid.querySelector(`.theme-color-swatch[data-key="${k}"]`);
+      if (sw) sw.value = sanitizeHexForInput(displayHex);
+      const hx = el.themeColorGrid.querySelector(`.theme-color-hex[data-key="${k}"]`);
+      if (hx) hx.value = defaults[k];
+      updateCustomThemePreview();
+    });
+  });
+}
+
+function sanitizeHexForInput(hex) {
+  if (!hex || typeof hex !== 'string') return '#22c55e';
+  const m = hex.match(/#([0-9a-f]{6})/i);
+  return m ? m[0] : '#22c55e';
+}
+
+function hexFromRgba(rgba) {
+  const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return '#808080';
+  return '#' + [m[1], m[2], m[3]].map(n => parseInt(n, 10).toString(16).padStart(2, '0')).join('');
+}
+
+function updateCustomThemePreview() {
+  if (!el.customThemePreview || !state.theme.customEditorVars) return;
+
+  const v = state.theme.customEditorVars;
+  const sidebarEl = el.customThemePreview.querySelector('.preview-sidebar');
+  const contentEl = el.customThemePreview.querySelector('.preview-content');
+  const headerEl = el.customThemePreview.querySelector('.preview-header');
+  const cardEl = el.customThemePreview.querySelector('.preview-card');
+  const accentEl = el.customThemePreview.querySelector('.preview-accent');
+
+  if (sidebarEl) {
+    sidebarEl.style.background = v.sidebarBg;
+    sidebarEl.style.color = v.primary;
+  }
+  if (contentEl) {
+    contentEl.style.background = v.contentBg;
+  }
+  if (headerEl) {
+    headerEl.style.background = v.contentText;
+  }
+  if (cardEl) {
+    const cardBg = isLikelyLightColor(v.contentBg && v.contentBg.startsWith('#') ? v.contentBg : '#ffffff')
+      ? 'rgba(0,0,0,0.04)'
+      : 'rgba(255,255,255,0.04)';
+    cardEl.style.background = cardBg;
+    cardEl.style.borderColor = isLikelyLightColor(v.contentBg && v.contentBg.startsWith('#') ? v.contentBg : '#ffffff')
+      ? 'rgba(0,0,0,0.06)'
+      : 'rgba(255,255,255,0.06)';
+  }
+  if (accentEl) {
+    accentEl.style.background = v.primary;
+  }
+}
+
+function saveCustomThemeHandler() {
+  if (typeof ThemeSystem === 'undefined') return;
+  const name = el.customThemeNameInput ? el.customThemeNameInput.value.trim() : '';
+  if (!name) {
+    alert('请输入主题名称');
+    if (el.customThemeNameInput) el.customThemeNameInput.focus();
+    return;
+  }
+  ThemeSystem.saveCustomTheme(name, state.theme.customEditorVars);
+  closeCustomThemeModal();
+  renderThemeSettings();
+  if (typeof updateThemeDependentCharts === 'function') {
+    updateThemeDependentCharts();
+  }
+}
+
+function exportThemeHandler() {
+  if (typeof ThemeSystem === 'undefined') return;
+  const json = ThemeSystem.exportTheme();
+  if (!json) {
+    alert('当前没有自定义主题可导出。请先创建一个自定义主题。');
+    return;
+  }
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cfg = ThemeSystem.getConfig();
+    const name = (cfg.customTheme && cfg.customTheme.name || 'custom-theme').replace(/\s+/g, '-');
+    a.download = `theme-${name}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('导出失败:', e);
+    alert('导出失败：' + e.message);
+  }
+}
+
+function importThemeHandler() {
+  if (!el.importThemeFile) return;
+  el.importThemeFile.value = '';
+  el.importThemeFile.click();
+}
+
+function onImportThemeFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file || typeof ThemeSystem === 'undefined') return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const result = ThemeSystem.importTheme(ev.target.result);
+    if (result === true) {
+      closeCustomThemeModal();
+      renderThemeSettings();
+      alert('主题导入成功并已应用！');
+      if (typeof updateThemeDependentCharts === 'function') {
+        updateThemeDependentCharts();
+      }
+    } else {
+      alert('导入失败：' + (result || '未知错误'));
+    }
+  };
+  reader.onerror = () => alert('读取文件失败');
+  reader.readAsText(file);
+}
+
+function resetThemeHandler() {
+  if (typeof ThemeSystem === 'undefined') return;
+  if (!confirm('确定要恢复到内置主题吗？当前自定义主题将被取消（可重新从已导出的 JSON 导入）。')) return;
+  ThemeSystem.resetToBuiltin('classic');
+  renderThemeSettings();
+  if (typeof updateThemeDependentCharts === 'function') {
+    updateThemeDependentCharts();
+  }
+}
+
+function onFollowSystemChanged(e) {
+  if (typeof ThemeSystem === 'undefined') return;
+  ThemeSystem.setFollowSystem(e.target.checked);
+  renderThemeGrid();
+  if (typeof updateThemeDependentCharts === 'function') {
+    updateThemeDependentCharts();
+  }
+}
+
+function updateThemeDependentCharts() {
+  if (typeof renderBarChart === 'function' && state.activeTab === 'stats' && !el.statsModal || el.statsModal?.style?.display === 'flex') {
+    renderBarChart();
+  }
+  if (typeof renderTrendChart === 'function' && typeof Chart !== 'undefined' && state.charts?.trend) {
+    renderTrendChart();
+  }
+  if (typeof renderHourChart === 'function' && typeof Chart !== 'undefined' && state.charts?.hour) {
+    renderHourChart();
+  }
+  if (typeof renderTagChart === 'function' && typeof Chart !== 'undefined' && state.charts?.tag) {
+    renderTagChart();
+  }
+  if (typeof renderProjectProgress === 'function') {
+    const isMainTab = state.activeTab === 'projects';
+    renderProjectProgress(isMainTab);
+  }
+}
+
+function setupThemeSystem() {
+  if (typeof ThemeSystem === 'undefined') {
+    console.warn('ThemeSystem 未加载，跳过主题系统初始化');
+    return;
+  }
+  ThemeSystem.init();
+
+  if (el.followSystemToggle) {
+    el.followSystemToggle.addEventListener('change', onFollowSystemChanged);
+  }
+  if (el.openCustomThemeBtn) {
+    el.openCustomThemeBtn.addEventListener('click', openCustomThemeModal);
+  }
+  if (el.exportThemeBtn) {
+    el.exportThemeBtn.addEventListener('click', exportThemeHandler);
+  }
+  if (el.importThemeBtn) {
+    el.importThemeBtn.addEventListener('click', importThemeHandler);
+  }
+  if (el.importThemeFile) {
+    el.importThemeFile.addEventListener('change', onImportThemeFileSelected);
+  }
+  if (el.resetThemeBtn) {
+    el.resetThemeBtn.addEventListener('click', resetThemeHandler);
+  }
+  if (el.closeCustomThemeModal) {
+    el.closeCustomThemeModal.addEventListener('click', closeCustomThemeModal);
+  }
+  if (el.cancelCustomTheme) {
+    el.cancelCustomTheme.addEventListener('click', closeCustomThemeModal);
+  }
+  if (el.saveCustomTheme) {
+    el.saveCustomTheme.addEventListener('click', saveCustomThemeHandler);
+  }
+  if (el.customThemeModal) {
+    el.customThemeModal.addEventListener('click', (e) => {
+      if (e.target === el.customThemeModal) {
+        closeCustomThemeModal();
+      }
+    });
+  }
+
+  window.addEventListener('theme-changed', () => {
+    if (typeof renderTomatoes === 'function') renderTomatoes();
+    if (typeof renderTasks === 'function' && state.activeTab === 'tasks') {
+      if (state.tasksViewMode === 'list') renderTasks();
+      else renderTasksByProject();
+    }
+    if (typeof renderRecords === 'function' && state.activeTab === 'records') renderRecords();
+    if (typeof updateThemeDependentCharts === 'function') updateThemeDependentCharts();
+  });
 }
 
 function setupSettings() {
@@ -4024,6 +4494,7 @@ async function init() {
   setupTaskControls();
   setupControls();
   setupSettings();
+  setupThemeSystem();
   setupShortcutInputs();
   setupStatsModal();
   setupCalendarControls();
