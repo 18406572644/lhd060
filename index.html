@@ -37,6 +37,13 @@
           </div>
         </div>
 
+        <div class="task-selector">
+          <label class="task-selector-label">关联任务</label>
+          <select class="task-select" id="taskSelect">
+            <option value="">不关联任务</option>
+          </select>
+        </div>
+
         <div class="timer-controls">
           <button class="ctrl-btn primary" id="startBtn">开始</button>
           <button class="ctrl-btn" id="pauseBtn" disabled>暂停</button>
@@ -50,14 +57,32 @@
       </div>
     </aside>
 
-    <!-- 右栏 日记 -->
+    <!-- 右栏 任务 & 日记 -->
     <main class="content">
       <header class="content-header">
         <h2 class="date-title" id="dateTitle"></h2>
-        <input type="date" id="datePicker" class="date-picker" />
+        <div class="content-header-right">
+          <div class="tab-switcher">
+            <button class="tab-btn active" data-tab="tasks">任务</button>
+            <button class="tab-btn" data-tab="records">日记</button>
+          </div>
+          <input type="date" id="datePicker" class="date-picker" />
+        </div>
       </header>
 
-      <div class="records-container" id="recordsContainer"></div>
+      <div class="tab-content" id="tasksTab">
+        <div class="tasks-header">
+          <button class="add-task-btn" id="addTaskBtn">
+            <span class="add-task-icon">+</span> 新增任务
+          </button>
+          <div class="tasks-summary" id="tasksSummary"></div>
+        </div>
+        <div class="tasks-container" id="tasksContainer"></div>
+      </div>
+
+      <div class="tab-content" id="recordsTab" style="display:none;">
+        <div class="records-container" id="recordsContainer"></div>
+      </div>
     </main>
 
     <!-- 底部统计条 -->
@@ -83,10 +108,46 @@
   <div class="modal-overlay" id="recordModal" style="display:none;">
     <div class="modal">
       <h3 class="modal-title">这个番茄钟你完成了什么？</h3>
+      <div class="record-task-info" id="recordTaskInfo"></div>
       <input type="text" id="recordInput" class="modal-input" placeholder="一句话记录..." maxlength="200" />
       <div class="modal-actions">
         <button class="modal-btn cancel" id="cancelRecord">跳过</button>
         <button class="modal-btn confirm" id="saveRecord">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 任务弹窗 -->
+  <div class="modal-overlay" id="taskModal" style="display:none;">
+    <div class="modal">
+      <h3 class="modal-title" id="taskModalTitle">新增任务</h3>
+      <div class="task-form">
+        <div class="form-group">
+          <label class="form-label">任务名称</label>
+          <input type="text" id="taskNameInput" class="form-input" placeholder="输入任务名称..." maxlength="100" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">预估番茄数</label>
+            <div class="pomodoro-counter">
+              <button class="pomodoro-count-btn" id="pomodoroMinus">−</button>
+              <span class="pomodoro-count-value" id="pomodoroCountDisplay">1</span>
+              <button class="pomodoro-count-btn" id="pomodoroPlus">+</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">优先级</label>
+            <select id="taskPrioritySelect" class="form-input">
+              <option value="1">低</option>
+              <option value="2" selected>中</option>
+              <option value="3">高</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="cancelTask">取消</button>
+        <button class="modal-btn confirm" id="saveTask">保存</button>
       </div>
     </div>
   </div>

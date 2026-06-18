@@ -15,7 +15,7 @@ let state = {
   isRunning: false,
   timerId: null,
   startTime: null,
-  data: { records: {} },
+  data: { records: {}, tasks: {}, lastActiveDate: null },
   currentDate: getDateKey(new Date()),
   editingRecordId: null,
   editingDateKey: null,
@@ -28,6 +28,11 @@ let state = {
     tag: null,
   },
   trendPeriod: '30days',
+  currentTaskId: null,
+  editingTaskId: null,
+  tempTaskPomodoroCount: 1,
+  activeTab: 'tasks',
+  draggedTaskId: null,
 };
 
 const el = {
@@ -75,6 +80,23 @@ const el = {
   tagChart: document.getElementById('tagChart'),
   tagEmptyHint: document.getElementById('tagEmptyHint'),
   trendToggleBtns: document.querySelectorAll('.trend-toggle-btn'),
+  taskSelect: document.getElementById('taskSelect'),
+  tasksTab: document.getElementById('tasksTab'),
+  recordsTab: document.getElementById('recordsTab'),
+  tabBtns: document.querySelectorAll('.tab-btn'),
+  addTaskBtn: document.getElementById('addTaskBtn'),
+  tasksContainer: document.getElementById('tasksContainer'),
+  tasksSummary: document.getElementById('tasksSummary'),
+  taskModal: document.getElementById('taskModal'),
+  taskModalTitle: document.getElementById('taskModalTitle'),
+  taskNameInput: document.getElementById('taskNameInput'),
+  taskPrioritySelect: document.getElementById('taskPrioritySelect'),
+  pomodoroMinus: document.getElementById('pomodoroMinus'),
+  pomodoroPlus: document.getElementById('pomodoroPlus'),
+  pomodoroCountDisplay: document.getElementById('pomodoroCountDisplay'),
+  cancelTask: document.getElementById('cancelTask'),
+  saveTask: document.getElementById('saveTask'),
+  recordTaskInfo: document.getElementById('recordTaskInfo'),
 };
 
 function getDateKey(d) {
@@ -215,12 +237,34 @@ function completePomodoro() {
     body: '休息一下，记录这个番茄钟完成了什么吧。',
   }).catch(() => {});
 
+  const taskId = state.currentTaskId || null;
+  let taskName = '';
+  if (taskId) {
+    const dates = Object.keys(state.data.tasks);
+    for (const dateKey of dates) {
+      const task = state.data.tasks[dateKey].find(t => t.id === taskId);
+      if (task) {
+        taskName = task.name;
+        break;
+      }
+    }
+  }
+
   state.pendingRecord = {
     id: Date.now().toString(),
     startTime: Date.now() - state.totalSeconds * 1000,
     durationMinutes: state.durationMinutes,
     content: '',
+    taskId,
+    taskName,
   };
+
+  if (taskName) {
+    el.recordTaskInfo.innerHTML = `<span class="record-task-info-label">关联任务:</span>${escapeHtml(taskName)}`;
+    el.recordTaskInfo.style.display = 'block';
+  } else {
+    el.recordTaskInfo.style.display = 'none';
+  }
 
   el.recordInput.value = '';
   el.recordModal.style.display = 'flex';
@@ -238,6 +282,20 @@ function savePendingRecord(content) {
   state.data.records[dateKey].push(record);
   state.data.records[dateKey].sort((a, b) => a.startTime - b.startTime);
 
+  if (record.taskId) {
+    const taskDates = Object.keys(state.data.tasks);
+    for (const taskDateKey of taskDates) {
+      const task = state.data.tasks[taskDateKey].find(t => t.id === record.taskId);
+      if (task) {
+        task.completedPomodoros = (task.completedPomodoros || 0) + 1;
+        if (task.status === 'todo') {
+          task.status = 'inProgress';
+        }
+        break;
+      }
+    }
+  }
+
   persistData();
   state.pendingRecord = null;
   state.startTime = null;
@@ -247,7 +305,7 @@ function savePendingRecord(content) {
     renderStats();
   }
   if (dateKey === state.currentDate) {
-    renderRecords();
+    renderAll();
   }
 }
 
@@ -263,6 +321,401 @@ async function persistData() {
   } catch (e) {
     console.error('保存数据失败:', e);
   }
+}
+
+function getTasksForDate(dateKey) {
+  return state.data.tasks[dateKey] || [];
+}
+
+function getSortedTasks(dateKey) {
+  const tasks = getTasksForDate(dateKey);
+  return [...tasks].sort((a, b) => {
+    if (a.status === 'completed' && b.status !== 'completed') return 1;
+    if (a.status !== 'completed' && b.status === 'completed') return -1;
+    return b.priority - a.priority || b.createdAt - a.createdAt;
+  });
+}
+
+function generateTaskId() {
+  return 'task_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function addTask(name, estimatedPomodoros, priority) {
+  const today = getDateKey(new Date());
+  const task = {
+    id: generateTaskId(),
+    name: name.trim(),
+    estimatedPomodoros,
+    priority,
+    status: 'todo',
+    completedPomodoros: 0,
+    createdAt: Date.now(),
+    completedAt: null,
+    isCarriedOver: false,
+    originalDate: today,
+  };
+
+  if (!state.data.tasks[today]) {
+    state.data.tasks[today] = [];
+  }
+  state.data.tasks[today].push(task);
+  persistData();
+  return task;
+}
+
+function updateTask(taskId, updates) {
+  const dates = Object.keys(state.data.tasks);
+  for (const dateKey of dates) {
+    const tasks = state.data.tasks[dateKey];
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx !== -1) {
+      tasks[idx] = { ...tasks[idx], ...updates };
+      persistData();
+      return tasks[idx];
+    }
+  }
+  return null;
+}
+
+function deleteTask(taskId) {
+  const dates = Object.keys(state.data.tasks);
+  for (const dateKey of dates) {
+    const tasks = state.data.tasks[dateKey];
+    const idx = tasks.findIndex(t => t.id === taskId);
+    if (idx !== -1) {
+      tasks.splice(idx, 1);
+      if (tasks.length === 0) {
+        delete state.data.tasks[dateKey];
+      }
+      persistData();
+      return true;
+    }
+  }
+  return false;
+}
+
+function toggleTaskStatus(taskId) {
+  const dates = Object.keys(state.data.tasks);
+  for (const dateKey of dates) {
+    const tasks = state.data.tasks[dateKey];
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      const statuses = ['todo', 'inProgress', 'completed'];
+      const currentIdx = statuses.indexOf(task.status);
+      const nextIdx = (currentIdx + 1) % statuses.length;
+      const newStatus = statuses[nextIdx];
+
+      task.status = newStatus;
+      task.completedAt = newStatus === 'completed' ? Date.now() : null;
+
+      if (state.currentTaskId === taskId && newStatus === 'completed') {
+        state.currentTaskId = null;
+      }
+
+      persistData();
+      return task;
+    }
+  }
+  return null;
+}
+
+function getPriorityLabel(priority) {
+  const labels = { 1: '低', 2: '中', 3: '高' };
+  return labels[priority] || '中';
+}
+
+function getStatusLabel(status) {
+  const labels = { todo: '待办', inProgress: '进行中', completed: '已完成' };
+  return labels[status] || '待办';
+}
+
+function renderTaskSelector() {
+  const today = getDateKey(new Date());
+  const tasks = getSortedTasks(today).filter(t => t.status !== 'completed');
+
+  el.taskSelect.innerHTML = '<option value="">不关联任务</option>';
+  tasks.forEach(task => {
+    const option = document.createElement('option');
+    option.value = task.id;
+    option.textContent = `${task.name} (预估${task.estimatedPomodoros}个)`;
+    if (state.currentTaskId === task.id) {
+      option.selected = true;
+    }
+    el.taskSelect.appendChild(option);
+  });
+
+  if (state.currentTaskId && !tasks.find(t => t.id === state.currentTaskId)) {
+    state.currentTaskId = null;
+  }
+}
+
+function renderTasksSummary() {
+  const tasks = getTasksForDate(state.currentDate);
+  const total = tasks.length;
+  const completed = tasks.filter(t => t.status === 'completed').length;
+  const estimatedTotal = tasks.reduce((sum, t) => sum + t.estimatedPomodoros, 0);
+  const completedTotal = tasks.reduce((sum, t) => sum + t.completedPomodoros, 0);
+
+  el.tasksSummary.innerHTML = `
+    <div class="tasks-summary-item">
+      <span>任务:</span>
+      <span class="tasks-summary-value">${completed}/${total}</span>
+    </div>
+    <div class="tasks-summary-item">
+      <span>番茄:</span>
+      <span class="tasks-summary-value">${completedTotal}/${estimatedTotal}</span>
+    </div>
+  `;
+}
+
+function renderTasks() {
+  el.dateTitle.textContent = formatDateDisplay(state.currentDate);
+  el.datePicker.value = state.currentDate;
+
+  const tasks = getSortedTasks(state.currentDate);
+  el.tasksContainer.innerHTML = '';
+
+  if (tasks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tasks-empty-state';
+    empty.innerHTML = `
+      <div class="tasks-empty-icon">📋</div>
+      <div class="tasks-empty-text">今天还没有任务</div>
+      <div class="tasks-empty-hint">点击上方"新增任务"开始规划你的一天</div>
+    `;
+    el.tasksContainer.appendChild(empty);
+    return;
+  }
+
+  tasks.forEach(task => {
+    const card = document.createElement('div');
+    card.className = `task-card status-${task.status}`;
+    card.draggable = true;
+    card.dataset.taskId = task.id;
+
+    const progressPct = Math.min((task.completedPomodoros / task.estimatedPomodoros) * 100, 100);
+    const isExceeded = task.completedPomodoros > task.estimatedPomodoros;
+
+    card.innerHTML = `
+      <div class="task-status-toggle status-${task.status}" title="切换状态：${getStatusLabel(task.status)}"></div>
+      <div class="task-content">
+        <div class="task-header">
+          <span class="task-name">${escapeHtml(task.name)}</span>
+          <span class="task-priority priority-${task.priority}">${getPriorityLabel(task.priority)}</span>
+          ${task.isCarriedOver ? '<span class="task-carried-badge">顺延</span>' : ''}
+        </div>
+        <div class="task-progress-section">
+          <div class="task-progress-info">
+            <span class="task-progress-text">${task.completedPomodoros} / ${task.estimatedPomodoros} 番茄</span>
+            <span class="task-progress-percentage" style="color: ${isExceeded ? '#f59e0b' : '#22c55e'}">${Math.round(progressPct)}%</span>
+          </div>
+          <div class="task-progress-bar">
+            <div class="task-progress-fill ${isExceeded ? 'exceeded' : ''}" style="width: ${progressPct}%"></div>
+          </div>
+        </div>
+        <div class="task-meta">
+          <div class="task-pomodoro-info">
+            <span class="task-pomodoro-icon">🍅</span>
+            <span>实际完成: ${task.completedPomodoros} 个</span>
+          </div>
+          <span>状态: ${getStatusLabel(task.status)}</span>
+        </div>
+      </div>
+      <div class="task-drag-handle" title="拖拽排序">
+        <span class="task-drag-dot"></span>
+        <span class="task-drag-dot"></span>
+        <span class="task-drag-dot"></span>
+      </div>
+      <div class="task-actions">
+        <button class="task-action-btn" data-action="edit" title="编辑">✎</button>
+        <button class="task-action-btn delete" data-action="delete" title="删除">✕</button>
+      </div>
+    `;
+
+    const statusToggle = card.querySelector('.task-status-toggle');
+    statusToggle.addEventListener('click', () => {
+      toggleTaskStatus(task.id);
+      renderAll();
+    });
+
+    const editBtn = card.querySelector('[data-action="edit"]');
+    editBtn.addEventListener('click', () => openEditTaskModal(task.id));
+
+    const deleteBtn = card.querySelector('[data-action="delete"]');
+    deleteBtn.addEventListener('click', () => {
+      if (confirm(`确定要删除任务"${task.name}"吗？`)) {
+        deleteTask(task.id);
+        if (state.currentTaskId === task.id) {
+          state.currentTaskId = null;
+        }
+        renderAll();
+      }
+    });
+
+    card.addEventListener('dragstart', handleDragStart);
+    card.addEventListener('dragend', handleDragEnd);
+    card.addEventListener('dragover', handleDragOver);
+    card.addEventListener('drop', handleDrop);
+    card.addEventListener('dragleave', handleDragLeave);
+
+    el.tasksContainer.appendChild(card);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function openAddTaskModal() {
+  state.editingTaskId = null;
+  state.tempTaskPomodoroCount = 1;
+  el.taskModalTitle.textContent = '新增任务';
+  el.taskNameInput.value = '';
+  el.taskPrioritySelect.value = '2';
+  el.pomodoroCountDisplay.textContent = '1';
+  el.pomodoroMinus.disabled = true;
+  el.taskModal.style.display = 'flex';
+  setTimeout(() => el.taskNameInput.focus(), 100);
+}
+
+function openEditTaskModal(taskId) {
+  const dates = Object.keys(state.data.tasks);
+  let task = null;
+  for (const dateKey of dates) {
+    task = state.data.tasks[dateKey].find(t => t.id === taskId);
+    if (task) break;
+  }
+  if (!task) return;
+
+  state.editingTaskId = taskId;
+  state.tempTaskPomodoroCount = task.estimatedPomodoros;
+  el.taskModalTitle.textContent = '编辑任务';
+  el.taskNameInput.value = task.name;
+  el.taskPrioritySelect.value = String(task.priority);
+  el.pomodoroCountDisplay.textContent = String(task.estimatedPomodoros);
+  el.pomodoroMinus.disabled = task.estimatedPomodoros <= 1;
+  el.taskModal.style.display = 'flex';
+  setTimeout(() => {
+    el.taskNameInput.focus();
+    el.taskNameInput.select();
+  }, 100);
+}
+
+function closeTaskModal() {
+  state.editingTaskId = null;
+  el.taskModal.style.display = 'none';
+}
+
+function saveTaskHandler() {
+  const name = el.taskNameInput.value.trim();
+  if (!name) {
+    el.taskNameInput.focus();
+    return;
+  }
+
+  const estimatedPomodoros = state.tempTaskPomodoroCount;
+  const priority = parseInt(el.taskPrioritySelect.value, 10);
+
+  if (state.editingTaskId) {
+    updateTask(state.editingTaskId, { name, estimatedPomodoros, priority });
+  } else {
+    addTask(name, estimatedPomodoros, priority);
+  }
+
+  closeTaskModal();
+  renderAll();
+}
+
+function handlePomodoroCountChange(delta) {
+  const newCount = state.tempTaskPomodoroCount + delta;
+  if (newCount >= 1 && newCount <= 20) {
+    state.tempTaskPomodoroCount = newCount;
+    el.pomodoroCountDisplay.textContent = String(newCount);
+    el.pomodoroMinus.disabled = newCount <= 1;
+  }
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  el.tabBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  el.tasksTab.style.display = tab === 'tasks' ? 'flex' : 'none';
+  el.recordsTab.style.display = tab === 'records' ? 'flex' : 'none';
+  if (tab === 'tasks') {
+    renderTasks();
+    renderTasksSummary();
+  } else {
+    renderRecords();
+  }
+}
+
+function handleDragStart(e) {
+  state.draggedTaskId = e.currentTarget.dataset.taskId;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragEnd(e) {
+  state.draggedTaskId = null;
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.task-card').forEach(card => {
+    card.classList.remove('drag-over');
+  });
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget;
+  if (card.dataset.taskId !== state.draggedTaskId) {
+    card.classList.add('drag-over');
+  }
+}
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  const targetTaskId = e.currentTarget.dataset.taskId;
+  e.currentTarget.classList.remove('drag-over');
+
+  if (!state.draggedTaskId || state.draggedTaskId === targetTaskId) return;
+
+  const today = state.currentDate;
+  const tasks = state.data.tasks[today];
+  if (!tasks) return;
+
+  const draggedIdx = tasks.findIndex(t => t.id === state.draggedTaskId);
+  const targetIdx = tasks.findIndex(t => t.id === targetTaskId);
+
+  if (draggedIdx === -1 || targetIdx === -1) return;
+
+  const [draggedTask] = tasks.splice(draggedIdx, 1);
+  tasks.splice(targetIdx, 0, draggedTask);
+
+  tasks.forEach((task, idx) => {
+    task.priority = Math.max(1, Math.min(3, task.priority));
+  });
+
+  persistData();
+  renderAll();
+}
+
+function renderAll() {
+  renderTaskSelector();
+  if (state.activeTab === 'tasks') {
+    renderTasks();
+    renderTasksSummary();
+  } else {
+    renderRecords();
+  }
+  renderTomatoes();
+  renderStats();
 }
 
 function renderTomatoes() {
@@ -313,7 +766,17 @@ function renderRecords() {
 
     const content = document.createElement('div');
     content.className = 'record-content';
-    content.textContent = record.content;
+
+    const text = document.createElement('div');
+    text.textContent = record.content;
+    content.appendChild(text);
+
+    if (record.taskName) {
+      const taskTag = document.createElement('div');
+      taskTag.style.cssText = 'margin-top: 6px; font-size: 12px; color: #22c55e;';
+      taskTag.innerHTML = `📋 ${escapeHtml(record.taskName)}`;
+      content.appendChild(taskTag);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'record-actions';
@@ -381,9 +844,21 @@ function deleteRecord(recordId, dateKey) {
   const idx = records.findIndex((r) => r.id === recordId);
   if (idx === -1) return;
 
+  const deletedRecord = records[idx];
   records.splice(idx, 1);
   if (records.length === 0) {
     delete state.data.records[dateKey];
+  }
+
+  if (deletedRecord.taskId) {
+    const taskDates = Object.keys(state.data.tasks);
+    for (const taskDateKey of taskDates) {
+      const task = state.data.tasks[taskDateKey].find(t => t.id === deletedRecord.taskId);
+      if (task) {
+        task.completedPomodoros = Math.max(0, (task.completedPomodoros || 0) - 1);
+        break;
+      }
+    }
   }
 
   persistData();
@@ -392,7 +867,7 @@ function deleteRecord(recordId, dateKey) {
     renderTomatoes();
     renderStats();
   }
-  if (dateKey === state.currentDate) renderRecords();
+  if (dateKey === state.currentDate) renderAll();
 }
 
 function getWeekDates() {
@@ -1025,6 +1500,40 @@ function setupDurationButtons() {
   });
 }
 
+function setupTaskControls() {
+  el.taskSelect.addEventListener('change', (e) => {
+    state.currentTaskId = e.target.value || null;
+  });
+
+  el.tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchTab(btn.dataset.tab);
+    });
+  });
+
+  el.addTaskBtn.addEventListener('click', openAddTaskModal);
+
+  el.cancelTask.addEventListener('click', closeTaskModal);
+  el.saveTask.addEventListener('click', saveTaskHandler);
+
+  el.pomodoroMinus.addEventListener('click', () => handlePomodoroCountChange(-1));
+  el.pomodoroPlus.addEventListener('click', () => handlePomodoroCountChange(1));
+
+  el.taskNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      saveTaskHandler();
+    } else if (e.key === 'Escape') {
+      closeTaskModal();
+    }
+  });
+
+  el.taskModal.addEventListener('click', (e) => {
+    if (e.target === el.taskModal) {
+      closeTaskModal();
+    }
+  });
+}
+
 function setupControls() {
   el.startBtn.addEventListener('click', startTimer);
   el.pauseBtn.addEventListener('click', pauseTimer);
@@ -1032,7 +1541,7 @@ function setupControls() {
 
   el.datePicker.addEventListener('change', (e) => {
     state.currentDate = e.target.value;
-    renderRecords();
+    renderAll();
   });
 
   el.cancelRecord.addEventListener('click', () => {
@@ -1231,9 +1740,11 @@ ipcRenderer.on('request-timer-state', () => {
 async function init() {
   try {
     state.data = await ipcRenderer.invoke('load-data');
+    if (!state.data.tasks) state.data.tasks = {};
+    if (!state.data.lastActiveDate) state.data.lastActiveDate = null;
   } catch (e) {
     console.error('加载数据失败:', e);
-    state.data = { records: {} };
+    state.data = { records: {}, tasks: {}, lastActiveDate: null };
   }
 
   try {
@@ -1247,14 +1758,13 @@ async function init() {
   }
 
   setupDurationButtons();
+  setupTaskControls();
   setupControls();
   setupSettings();
   setupShortcutInputs();
   setupStatsModal();
   updateTimerDisplay();
-  renderTomatoes();
-  renderRecords();
-  renderStats();
+  renderAll();
   syncTimerState();
 }
 

@@ -19,12 +19,15 @@ function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(raw);
+      const data = JSON.parse(raw);
+      if (!data.tasks) data.tasks = {};
+      if (!data.lastActiveDate) data.lastActiveDate = null;
+      return data;
     }
   } catch (e) {
     console.error('加载数据失败:', e);
   }
-  return { records: {} };
+  return { records: {}, tasks: {}, lastActiveDate: null };
 }
 
 function saveData(data) {
@@ -71,6 +74,42 @@ function saveSettings(settings) {
 function getTodayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function carryOverUnfinishedTasks(data) {
+  const today = getTodayKey();
+  const lastDate = data.lastActiveDate;
+
+  if (!lastDate || lastDate === today) {
+    data.lastActiveDate = today;
+    return data;
+  }
+
+  if (!data.tasks[today]) {
+    data.tasks[today] = [];
+  }
+
+  const dates = Object.keys(data.tasks).sort();
+  dates.forEach(dateKey => {
+    if (dateKey >= today) return;
+
+    const tasks = data.tasks[dateKey] || [];
+    tasks.forEach(task => {
+      if (task.status !== 'completed') {
+        const existingTask = data.tasks[today].find(t => t.id === task.id);
+        if (!existingTask) {
+          data.tasks[today].push({
+            ...task,
+            isCarriedOver: true,
+            originalDate: task.originalDate || dateKey,
+          });
+        }
+      }
+    });
+  });
+
+  data.lastActiveDate = today;
+  return data;
 }
 
 function countTodayPomodoros() {
@@ -317,7 +356,10 @@ function isShortcutAvailable(accelerator) {
 }
 
 ipcMain.handle('load-data', () => {
-  return loadData();
+  let data = loadData();
+  data = carryOverUnfinishedTasks(data);
+  saveData(data);
+  return data;
 });
 
 ipcMain.handle('save-data', (_event, data) => {
